@@ -4,7 +4,7 @@
 
 (needs updating for each cohort)
 
-https://campus.cs.le.ac.uk/gitlab/pgt_project/24_24_Summer/<UID>
+https://campus.cs.le.ac.uk/gitlab/pgt_project/24_24_Summer/UID
 
 ## Who has access?
 
@@ -15,7 +15,7 @@ involved in the project also have access.
 
 * Use the "Informatics student LDAP" login tab (*NOT* the "Standard"
   login tab).
-* Username: <UID> (without @student.le.ac.uk)
+* Username: `UID` (without @student.le.ac.uk)
 * Password: same as normal
 
 Gitlab has an automatic anti-brute-force-login mechanism. If you fail
