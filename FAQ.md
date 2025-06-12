@@ -117,8 +117,7 @@ sharing.
 ### git-lfs (Large File Storage)
 
 The gitlab server has LFS (Large File Storage) enabled and you are
-encouraged to use it for data files in general. See
-https://git-lfs.com/
+encouraged to use it for data files in general. See [the git-lfs home page](https://git-lfs.com/)
 
 LFS can mitigate the growth in size of your project commit history -
 but you should note that the files still contribute to your quota
@@ -131,6 +130,11 @@ The CMS gitlab installation does not directly support
 use it with your local copy of the repository to automate support for
 storing large data files remotely without needing to commit them
 directly to gitlab.
+
+[This
+page](https://numpex-pc5.gitlabpages.inria.fr/wp2-co-design/doc-hub/large-files/git-annex/)
+also provides a discussion of the issues and some examples of
+git-annex in use.
 
 (If you have direct experience with git-annex, please get in touch so
 we can update this FAQ.)
