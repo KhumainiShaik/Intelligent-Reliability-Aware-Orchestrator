@@ -4,7 +4,7 @@
 
 (needs updating for each cohort)
 
-https://campus.cs.le.ac.uk/gitlab/pgt_project/24_24_Summer/UID
+https://campus.cs.le.ac.uk/gitlab/pgt_project/25_26_Autumn/UID
 
 ## Who has access?
 
