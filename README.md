@@ -1,10 +1,10 @@
 [comment]: # (You may find the following markdown cheat sheet useful: https://www.markdownguide.org/cheat-sheet/. You may also consider using an online Markdown editor such as StackEdit or makeareadme.) 
 
-## Project title: *[Insert your project title here]*
+## Project title: *Intelligent Reliability-Aware Orchestration for Cloud Systems*
 
-### Student name: *[Insert your name here]*
+### Student name: *Abdul Khumaini Shaik*
 
-### Student email: *[Insert your university email address here]*
+### Student email: *aks85@student.le.ac.uk*
 
 ### Project description: 
 *[Add your project description here, these will typically be around 100-150 words long]*
