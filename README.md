@@ -9,9 +9,9 @@
 ### Project description: 
 *Modern cloud systems, particularly those hosting machine learning workloads on Kubernetes, suffer frequent service disruptions not because of application bugs, but due to poor coordination between deployment operations and dynamic workload conditions. In real production environments, deployments often coincide with sudden workload surges triggered by user demand, scheduled jobs, or external system behaviour. During such periods, Kubernetes must simultaneously terminate existing pods, schedule new ones, pull container images, and rebalance cluster resources. This concurrency can result in resource starvation, delayed pod startups, cascading restarts, and in extreme cases, partial or full service outages.*
 
-*Although Kubernetes provides mechanisms such as rolling updates and horizontal autoscaling, these mechanisms operate in isolation. Autoscalers react only after resource pressure is already visible, while deployment controllers follow predefined rollout strategies without any awareness of imminent workload changes. Consequently, Kubernetes lacks an intelligent decision layer capable of reasoning about when and how to deploy based on the current cluster state and predicted workload behaviour.*
+*Although Kubernetes provides mechanisms such as rolling updates and horizontal autoscaling, these mechanisms operate in isolation. Autoscalers react only after resource pressure is already visible, while deployment controllers follow predefined rollout strategies without any awareness of the operational stress already present in the cluster. Consequently, Kubernetes lacks an intelligent decision layer capable of reasoning about when and how to deploy based on the current cluster state and real-time autoscaling conditions.*
 
-*This project addresses that gap by designing an intelligent orchestration agent that selects an optimal deployment strategy at deployment time. Given a cluster state vector 𝑆, the agent selects an action 𝐴 ∈ {𝑐𝑙𝑜𝑛𝑒, 𝑟𝑒𝑑𝑒𝑝𝑙𝑜𝑦, 𝑐𝑎𝑛𝑎𝑟𝑦} that minimises an expected failure cost 𝐶 under current autoscaling demand 𝐷. The system evaluates metrics such as CPU utilisation, pending pods, desired replicas, model size, and historical failure rates to make a strategic decision before a deployment proceeds.*
+*This project addresses that gap by designing an intelligent orchestration agent that selects an optimal deployment strategy at deployment time. Given a cluster state vector 𝑆 at deployment time, the agent selects an action 𝐴 ∈ {𝑐𝑙𝑜𝑛𝑒, 𝑟𝑒𝑑𝑒𝑝𝑙𝑜𝑦, 𝑐𝑎𝑛𝑎𝑟𝑦} that minimises an expected failure cost 𝐶 under currently observed autoscaling demand 𝐷. The system evaluates real-time operational metrics such as CPU utilisation, pending pods, desired replicas, model size, scheduling latency, and historical failure behaviour to make a strategic decision before a deployment proceeds.*
 
 *The proposed solution does not replace Kubernetes scheduling or autoscaling mechanisms. Instead, it augments them with a higher-level decision-making component that reasons about deployment timing and strategy. The effectiveness of this approach will be evaluated in a controlled Kubernetes testbed using realistic workloads and failure scenarios. Success will be measured in terms of reduced deployment failures, lower service latency during rollouts, and faster recovery times compared to standard Kubernetes behaviour.*
 
@@ -21,7 +21,7 @@
 
 [comment]: # (You can add as many additional bullet points as necessary by adding an additional hyphon symbol '-' at the end of each list) 
 
-Essential:
+**Essential:**
 - Formally define the orchestration problem as a decision-making task that selects an optimal deployment strategy based on real-time cluster conditions.
 - Design and implement a Kubernetes-based experimental environment that includes real deployment controllers, autoscalers, and workload generation tools.
 - Develop an intelligent decision agent capable of choosing between multiple deployment strategies (clone, redeploy, canary) at deployment time.
@@ -30,14 +30,16 @@ Essential:
 - Conduct controlled experiments comparing the agent-driven approach with standard Kubernetes deployment mechanisms.
 - Produce quantitative evaluation results demonstrating whether intelligent strategy selection improves deployment reliability.
 
-Desirable:
+**Desirable:**
 - Incorporate additional system signals such as memory pressure, scheduling latency, and node availability into the decision process.
 - Implement multiple baseline strategies (standard rolling update, delayed deployment, canary) to allow more rigorous comparison.
+- Incorporate additional real-time contextual signals, such as recent autoscaling activity and scheduling backlog, to improve decision quality.
 - Evaluate the system under diverse scenarios, including resource contention and simulated failure conditions.
 - Provide detailed analysis of trade-offs between resource overhead and reliability improvements.
 - Develop visualizations and dashboards to analyse system behaviour during experiments.
 
-Optional:
+**Optional:**
+- Explore reinforcement learning techniques for automated policy learning based solely on real-time observed system state instead of rule-based decision logic.
 - Package the agent as a reusable Kubernetes operator or controller.
 - Extend the system to support multi-cluster or multi-application environments.
 - Validate the approach using external workload traces or additional real-world datasets.
