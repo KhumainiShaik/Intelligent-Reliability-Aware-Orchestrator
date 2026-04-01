@@ -52,3 +52,23 @@ This is the repository that you are going to use **individually** for developing
 Regarding the use of this repository, once a feature (or part of it) is developed and **working** or parts of your system are integrated and **working**, define a commit and push it to the remote repository. You may find yourself making a commit after a productive hour of work (or even after 20 minutes!), for example. Choose commit message wisely and be concise.
 
 Please choose the structure of the contents of this repository that suits the needs of your project but do indicate in this file where the main software artefacts are located.
+
+## Main software artefacts (where to look)
+
+- `controller/` — Python kopf operator (deploy-time orchestration logic)
+- `charts/` — Helm charts (controller, workload, ML workload, monitoring)
+- `k8s/` — Supplementary Kubernetes manifests (namespaces, Argo CD, chaos, CRD)
+- `workload/` — Go workload service (target app)
+- `ml-workload/` — ML inference service
+- `kisim/` — offline simulator + RL training code
+- `evaluation/` — analysis scripts
+- `k6/` — load testing scenarios
+- `experiments/` — experiment configuration (results are not committed)
+
+## E2E runs (after cloning)
+
+This repository intentionally does **not** commit `scripts/`, `artifacts/`, or `results/`.
+
+- Copy your automation scripts into `./scripts/` (from your cloud storage).
+- (Optional RL) Mount a `policy_artifact.json` via the `rl-policy-artifact` ConfigMap (Helm chart supports this as an optional volume).
+- Deploy using Helm (`charts/`) or your scripts, then run the experiment scenarios.

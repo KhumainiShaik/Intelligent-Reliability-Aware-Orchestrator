@@ -1,0 +1,64 @@
+# Build artifacts
+bin/
+*.exe
+
+# Python bytecode
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# IDE / editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Test / coverage
+.pytest_cache/
+htmlcov/
+coverage.out
+coverage.html
+.coverage
+.mypy_cache/
+.ruff_cache/
+
+# Documentation (architecture specs not needed in images)
+*.md
+docs/
+01_architecture_end_to_end.md
+02_component_behaviors_spec.md
+
+# k6 / evaluation / experiments (not part of runtime images)
+k6/
+evaluation/
+experiments/
+scripts/
+
+# Helm charts (deployed separately, not baked into images)
+charts/
+
+# Raw k8s manifests
+k8s/
+
+# KISim training artifacts (large files)
+kisim/artifacts/
+*.json
+
+# Secrets — never include
+*.key
+*.pem
+*.env
+.env*

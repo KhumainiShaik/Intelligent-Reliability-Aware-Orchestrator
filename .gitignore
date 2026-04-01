@@ -1,0 +1,76 @@
+# Binaries
+bin/
+*.exe
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Go
+*.test
+coverage.out
+coverage.html
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+coverage.xml
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Docker
+*.tar
+
+# Local-only folders (not committed)
+scripts/
+artifacts/
+results/
+archive/
+
+# Experiment artifacts (large)
+experiments/grid_*/
+experiments/exp_*/
+experiments/*/k6_results/
+experiments/*/reports/
+experiments/*/plots/
+
+# KISim training artifacts (large)
+kisim/artifacts/*/
+
+# k6 results
+k6/results/
+
+# Node
+node_modules/
+
+# Cloned repos
+aks85/
+
+# Staging area
+remote-repo/
+
+# Temp validation scripts
+_test_pipeline.py
+_validate_pipeline.py
+_validate_qtable.py
+_*.py
+
+# ONNX models (large binary files)
+*.onnx
+*.onnx.data
+
+# Large k6 streaming JSON logs (use k6_summary.json instead)
+# experiments/*/k6.json files are 50-250MB each
+experiments/*/*/k6.json
