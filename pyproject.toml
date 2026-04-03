@@ -1,0 +1,68 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "orchestrated-rollout-controller"
+version = "0.1.0"
+description = "Kubernetes operator for deploy-time RL-based rollout orchestration"
+requires-python = ">=3.11"
+license = "MIT"
+dependencies = [
+    "kopf>=1.37,<2.0",
+    "kubernetes>=29.0,<31.0",
+    "requests>=2.31,<3.0",
+    "urllib3>=2.0,<3.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.4",
+    "mypy>=1.10",
+    "types-requests>=2.31",
+]
+
+[project.scripts]
+controller = "controller.main:main"
+
+[tool.setuptools.packages.find]
+include = ["controller*", "kisim*", "evaluation*"]
+
+# ── Ruff ──────────────────────────────────────────────────────
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+src = ["controller", "kisim", "evaluation"]
+exclude = [
+    "archive/",
+    "remote-repo/",
+    "aks85/",
+    ".venv/",
+    "venv/",
+]
+
+[tool.ruff.lint]
+select = [
+    "E",     # pycodestyle errors
+    "W",     # pycodestyle warnings
+    "F",     # pyflakes
+    "I",     # isort
+    "N",     # pep8-naming
+    "UP",    # pyupgrade
+    "B",     # flake8-bugbear
+    "SIM",   # flake8-simplify
+    "TCH",   # type-checking imports
+    "RUF",   # ruff-specific
+]
+ignore = ["E501"]  # line length handled by formatter
+
+[tool.ruff.lint.isort]
+known-first-party = ["controller", "kisim", "evaluation"]
+
+# ── Mypy ──────────────────────────────────────────────────────
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+ignore_missing_imports = true

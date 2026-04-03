@@ -20,6 +20,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+
 @dataclass
 class DecisionSnapshot:
     """All signals collected at deploy time for strategy selection."""
@@ -222,9 +223,10 @@ class Collector:
             snap.node_mem_util = mem
 
         # HPA context
+        hpa_name = f"{target_name}-hpa"
         desired, err = self._query_scalar(
             f"kube_horizontalpodautoscaler_status_desired_replicas"
-            f'{{namespace="{namespace}",horizontalpodautoscaler="workload-hpa"}}'
+            f'{{namespace="{namespace}",horizontalpodautoscaler="{hpa_name}"}}'
         )
         if err:
             errors.append(f"hpa_desired: {err}")
@@ -233,7 +235,7 @@ class Collector:
 
         current, err = self._query_scalar(
             f"kube_horizontalpodautoscaler_status_current_replicas"
-            f'{{namespace="{namespace}",horizontalpodautoscaler="workload-hpa"}}'
+            f'{{namespace="{namespace}",horizontalpodautoscaler="{hpa_name}"}}'
         )
         if err:
             errors.append(f"hpa_current: {err}")
