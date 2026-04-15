@@ -1,0 +1,84 @@
+# Argo CD Application — Workload (Helm)
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: orchestrated-rollout-workload
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: orchestrated-rollout
+spec:
+  project: default
+  source:
+    # Update with your actual Git repo URL
+    repoURL: https://github.com/khumaini/orchestrated-rollout.git
+    targetRevision: main
+    path: charts/workload
+    helm:
+      releaseName: workload
+      valueFiles:
+        - values.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: orchestrated-rollout
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+---
+# Argo CD Application — Controller (Helm)
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: orchestrated-rollout-controller
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: orchestrated-rollout
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/khumaini/orchestrated-rollout.git
+    targetRevision: main
+    path: charts/controller
+    helm:
+      releaseName: controller
+      valueFiles:
+        - values.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: orchestrated-rollout
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+---
+# Argo CD Application — Monitoring (Helm)
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: orchestrated-rollout-monitoring
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: orchestrated-rollout
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/khumaini/orchestrated-rollout.git
+    targetRevision: main
+    path: charts/monitoring
+    helm:
+      releaseName: monitoring
+      valueFiles:
+        - values.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

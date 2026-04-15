@@ -1,0 +1,37 @@
+# OrchestratedRollout for the ML inference workload (MobileNetV2)
+# Triggers deploy-time strategy selection on the real ML service
+apiVersion: rollout.orchestrated.io/v1alpha1
+kind: OrchestratedRollout
+metadata:
+  name: ml-workload-v2-rollout
+  namespace: orchestrated-rollout
+  labels:
+    app: ml-workload
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: ml-workload-ml-workload
+
+  release:
+    image: orchestrated-rollout-ml-workload
+    tag: v2.0.0
+
+  actionSet:
+    - delay
+    - pre-scale
+    - canary
+    - rolling
+
+  slo:
+    maxP95LatencyMs: 200          # ML inference has higher baseline latency
+    maxErrorRate: 0.01
+
+  rolloutHints:
+    targetReplicas: 3
+    warmUpClass: slow             # Real model loading = slow warm-up
+
+  guardrailConfig:
+    maxDelaySeconds: 180          # Allow more delay for ML model loading
+    maxExtraReplicas: 4
+    maxRolloutTimeSeconds: 900    # Longer timeout for model warm-up

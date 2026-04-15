@@ -1,0 +1,6 @@
+apiVersion: v2
+name: monitoring
+description: Prometheus + kube-state-metrics for the OrchestratedRollout system
+type: application
+version: 0.1.0
+appVersion: "2.50.1"

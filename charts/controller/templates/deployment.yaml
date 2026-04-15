@@ -1,0 +1,76 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "controller.fullname" . }}
+  labels:
+    {{- include "controller.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount | default 1 }}
+  selector:
+    matchLabels:
+      {{- include "controller.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "controller.selectorLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "controller.serviceAccountName" . }}
+      automountServiceAccountToken: true
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        fsGroup: 65534
+      containers:
+        - name: controller
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          env:
+            - name: PROMETHEUS_URL
+              value: {{ .Values.controller.prometheusUrl | quote }}
+            - name: POLICY_PATH
+              value: {{ .Values.controller.policyPath | quote }}
+            - name: EPISODE_LOG_PATH
+              value: {{ .Values.controller.episodeLogPath | quote }}
+            - name: LOG_LEVEL
+              value: {{ .Values.controller.logLevel | quote }}
+            - name: LOG_FORMAT
+              value: {{ .Values.controller.logFormat | default "json" | quote }}
+          ports:
+            - containerPort: 8081
+              name: health
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: policy
+              mountPath: {{ .Values.controller.policyPath }}
+              readOnly: true
+            - name: episodes
+              mountPath: {{ .Values.controller.episodeLogPath }}
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: policy
+          configMap:
+            name: rl-policy-artifact
+            optional: true
+        - name: episodes
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}

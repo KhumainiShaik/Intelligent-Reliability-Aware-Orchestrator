@@ -1,0 +1,28 @@
+# Controller Helm values
+replicaCount: 1
+
+image:
+  repository: orchestrated-rollout-controller
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+controller:
+  prometheusUrl: "http://prometheus.monitoring.svc.cluster.local:9090"
+  policyPath: "/policy/artifact"
+  episodeLogPath: "/episodes"
+  logLevel: "INFO"
+  logFormat: "json"
+
+serviceAccount:
+  name: ""
+
+rbac:
+  create: true
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi

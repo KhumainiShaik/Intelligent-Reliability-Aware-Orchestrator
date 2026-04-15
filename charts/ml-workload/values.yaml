@@ -1,0 +1,46 @@
+# ML Workload Helm values
+replicaCount: 2
+
+image:
+  repository: orchestrated-rollout-ml-workload
+  tag: "v1.0.0"
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8080
+
+mlWorkload:
+  port: 8080
+  version: "v1.0.0"
+  warmupDelaySecs: "8"
+  modelPath: "/app/model/mobilenetv2.onnx"
+
+ingress:
+  enabled: true
+  className: nginx
+  host: ml-workload.local
+
+hpa:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilization: 60
+  scaleUp:
+    stabilizationWindowSeconds: 30
+    maxPods: 3
+    maxPercent: 100
+    periodSeconds: 60
+  scaleDown:
+    stabilizationWindowSeconds: 120
+    maxPods: 2
+    periodSeconds: 60
+
+resources:
+  requests:
+    cpu: 200m
+    memory: 256Mi
+  limits:
+    cpu: "1"
+    memory: 512Mi

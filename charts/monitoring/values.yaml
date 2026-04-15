@@ -1,0 +1,29 @@
+# Monitoring Helm values
+prometheus:
+  image: prom/prometheus:v2.50.1
+  retention: "7d"
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 2Gi
+
+kubeStateMetrics:
+  image: registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.11.0
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
+rbac:
+  create: true
+
+namespace: monitoring
+
+# Namespaces to scrape workload metrics from
+workloadNamespace: orchestrated-rollout

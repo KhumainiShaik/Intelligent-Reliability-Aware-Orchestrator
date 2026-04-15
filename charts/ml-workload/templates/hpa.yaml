@@ -1,0 +1,40 @@
+{{- if .Values.hpa.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "ml-workload.fullname" . }}-hpa
+  labels:
+    {{- include "ml-workload.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "ml-workload.fullname" . }}
+  minReplicas: {{ .Values.hpa.minReplicas }}
+  maxReplicas: {{ .Values.hpa.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.hpa.targetCPUUtilization }}
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: {{ .Values.hpa.scaleUp.stabilizationWindowSeconds }}
+      policies:
+        - type: Pods
+          value: {{ .Values.hpa.scaleUp.maxPods }}
+          periodSeconds: {{ .Values.hpa.scaleUp.periodSeconds }}
+        - type: Percent
+          value: {{ .Values.hpa.scaleUp.maxPercent }}
+          periodSeconds: {{ .Values.hpa.scaleUp.periodSeconds }}
+      selectPolicy: Max
+    scaleDown:
+      stabilizationWindowSeconds: {{ .Values.hpa.scaleDown.stabilizationWindowSeconds }}
+      policies:
+        - type: Pods
+          value: {{ .Values.hpa.scaleDown.maxPods }}
+          periodSeconds: {{ .Values.hpa.scaleDown.periodSeconds }}
+      selectPolicy: Min
+{{- end }}

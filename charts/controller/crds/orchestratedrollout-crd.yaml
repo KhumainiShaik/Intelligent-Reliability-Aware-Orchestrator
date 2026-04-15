@@ -1,0 +1,145 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: orchestratedrollouts.rollout.orchestrated.io
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.14.0
+spec:
+  group: rollout.orchestrated.io
+  names:
+    kind: OrchestratedRollout
+    listKind: OrchestratedRolloutList
+    plural: orchestratedrollouts
+    singular: orchestratedrollout
+    shortNames:
+      - oroll
+      - orollout
+  scope: Namespaced
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - name: Phase
+          type: string
+          jsonPath: .status.phase
+        - name: Strategy
+          type: string
+          jsonPath: .status.chosenStrategy
+        - name: StressScore
+          type: number
+          jsonPath: .status.stressScore
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp
+      schema:
+        openAPIV3Schema:
+          type: object
+          description: OrchestratedRollout is a declarative intent for deploy-time strategy selection.
+          properties:
+            apiVersion:
+              type: string
+            kind:
+              type: string
+            metadata:
+              type: object
+            spec:
+              type: object
+              required: [targetRef, release]
+              properties:
+                targetRef:
+                  type: object
+                  required: [apiVersion, kind, name]
+                  properties:
+                    apiVersion:
+                      type: string
+                    kind:
+                      type: string
+                    name:
+                      type: string
+                release:
+                  type: object
+                  required: [image]
+                  properties:
+                    image:
+                      type: string
+                    tag:
+                      type: string
+                actionSet:
+                  type: array
+                  items:
+                    type: string
+                    enum: [delay, pre-scale, canary, rolling]
+                slo:
+                  type: object
+                  properties:
+                    maxP95LatencyMs:
+                      type: number
+                    maxErrorRate:
+                      type: number
+                rolloutHints:
+                  type: object
+                  properties:
+                    targetReplicas:
+                      type: integer
+                      format: int32
+                    warmUpClass:
+                      type: string
+                      enum: [fast, medium, slow]
+                    imageSizeClass:
+                      type: string
+                      enum: [small, medium, large]
+                policyVersion:
+                  type: string
+                guardrailConfig:
+                  type: object
+                  properties:
+                    maxDelaySeconds:
+                      type: integer
+                    maxExtraReplicas:
+                      type: integer
+                    maxRolloutTimeSeconds:
+                      type: integer
+            status:
+              type: object
+              properties:
+                phase:
+                  type: string
+                  enum: [Pending, ChoosingStrategy, Executing, Completed, Aborted, Failed]
+                chosenStrategy:
+                  type: string
+                  enum: [delay, pre-scale, canary, rolling]
+                policyVersion:
+                  type: string
+                decisionTimestamp:
+                  type: string
+                  format: date-time
+                startTimestamp:
+                  type: string
+                  format: date-time
+                completionTimestamp:
+                  type: string
+                  format: date-time
+                stressScore:
+                  type: number
+                message:
+                  type: string
+                conditions:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      type:
+                        type: string
+                      status:
+                        type: string
+                      lastTransitionTime:
+                        type: string
+                        format: date-time
+                      reason:
+                        type: string
+                      message:
+                        type: string
+                    required: [type, status, lastTransitionTime, reason, message]

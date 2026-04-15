@@ -1,0 +1,49 @@
+# Stable service — always points to the stable version
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "ml-workload.fullname" . }}-stable
+  labels:
+    {{- include "ml-workload.labels" . | nindent 4 }}
+    role: stable
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: {{ .Values.service.targetPort }}
+      name: http
+  selector:
+    {{- include "ml-workload.selectorLabels" . | nindent 4 }}
+---
+# Canary service — used during canary rollouts
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "ml-workload.fullname" . }}-canary
+  labels:
+    {{- include "ml-workload.labels" . | nindent 4 }}
+    role: canary
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: {{ .Values.service.targetPort }}
+      name: http
+  selector:
+    {{- include "ml-workload.selectorLabels" . | nindent 4 }}
+---
+# Primary service (general purpose)
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "ml-workload.fullname" . }}
+  labels:
+    {{- include "ml-workload.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: {{ .Values.service.targetPort }}
+      name: http
+  selector:
+    {{- include "ml-workload.selectorLabels" . | nindent 4 }}

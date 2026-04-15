@@ -1,0 +1,53 @@
+# Workload Helm values
+replicaCount: 2
+
+image:
+  repository: orchestrated-rollout-workload
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8080
+
+workload:
+  port: 8080
+  warmupDelay: "5s"
+  # cpuWorkMs: real CPU-burning loop per request (see workload/main.go simulateCPUWork).
+  # 30ms per request with 250m limit = ~4× over-provision at 50 RPS/pod, forcing
+  # real CPU throttling, p95 latency spikes and HPA activity — required to drive
+  # stress_score into bins 3–4 (0.5–0.75+) during spike experiments.
+  cpuWorkMs: 30
+  version: "v1.0.0"
+
+ingress:
+  enabled: true
+  className: nginx
+  host: workload.local
+
+hpa:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 20
+  targetCPUUtilization: 60
+  scaleUp:
+    stabilizationWindowSeconds: 30
+    maxPods: 4
+    maxPercent: 100
+    periodSeconds: 60
+  scaleDown:
+    stabilizationWindowSeconds: 120
+    maxPods: 2
+    periodSeconds: 60
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 64Mi
+  limits:
+    # Reduced from 500m to 250m to simulate production-scale CPU constraint on kind.
+    # At 100 RPS × 30ms CPU work = 3000ms/s needed vs 500ms/s (2 pods × 250m) =
+    # 6× over-provision → real throttling → p95 spikes to 150–300ms under spike load.
+    cpu: 250m
+    memory: 256Mi

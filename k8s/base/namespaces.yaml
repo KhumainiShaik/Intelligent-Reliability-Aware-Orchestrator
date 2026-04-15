@@ -1,0 +1,39 @@
+# Namespace for the orchestrated-rollout system
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: orchestrated-rollout
+  labels:
+    app.kubernetes.io/part-of: orchestrated-rollout
+---
+# Namespace for monitoring
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+  labels:
+    app.kubernetes.io/part-of: orchestrated-rollout
+---
+# Namespace for Argo CD
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: argocd
+  labels:
+    app.kubernetes.io/part-of: orchestrated-rollout
+---
+# Namespace for Argo Rollouts
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: argo-rollouts
+  labels:
+    app.kubernetes.io/part-of: orchestrated-rollout
+---
+# Namespace for LitmusChaos
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: litmus
+  labels:
+    app.kubernetes.io/part-of: orchestrated-rollout

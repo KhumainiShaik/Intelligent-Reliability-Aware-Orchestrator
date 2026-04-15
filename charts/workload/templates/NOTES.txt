@@ -1,0 +1,13 @@
+The ML inference workload has been deployed.
+
+Release: {{ .Release.Name }}
+Namespace: {{ .Release.Namespace }}
+
+To verify the deployment:
+
+  kubectl get pods -n {{ .Release.Namespace }} -l {{ include "workload.selectorLabels" . | replace ": " "=" | replace "\n" "," }}
+
+To test the inference endpoint:
+
+  kubectl port-forward -n {{ .Release.Namespace }} svc/{{ include "workload.fullname" . }} 8080:{{ .Values.service.port }}
+  curl http://localhost:8080/inference

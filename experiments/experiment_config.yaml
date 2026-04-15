@@ -1,0 +1,63 @@
+# Experiment Grid Configuration
+# Defines the scenario space for experiment runs.
+
+experiment:
+  name: "orchestrated-rollout-evaluation"
+  description: "Compare RL policy vs rule-based vs fixed baselines"
+  repeats_per_scenario: 5
+
+scenarios:
+  workload_patterns:
+    - name: steady
+      k6_script: k6/scenarios/steady.js
+      params:
+        TARGET_RPS: 100
+        DURATION: "5m"
+    - name: ramp
+      k6_script: k6/scenarios/ramp.js
+      params:
+        BASE_RPS: 50
+        PEAK_RPS: 300
+        RAMP_DURATION: "3m"
+    - name: spike
+      k6_script: k6/scenarios/spike.js
+      params:
+        BASE_RPS: 100
+        SPIKE_RPS: 500
+        SPIKE_DURATION: "1m"
+
+  faults:
+    - name: none
+    - name: pod-kill
+      manifest: k8s/chaos/pod-kill.yaml
+    - name: network-latency
+      manifest: k8s/chaos/network-latency.yaml
+
+  policies:
+    - name: rl-policy
+      type: rl
+      artifact: kisim/artifacts/v1/policy_artifact.json
+    - name: rule-based
+      type: rule-based
+    - name: fixed-rolling
+      type: fixed
+      action: rolling
+    - name: fixed-canary
+      type: fixed
+      action: canary
+    - name: fixed-delay
+      type: fixed
+      action: delay
+    - name: fixed-pre-scale
+      type: fixed
+      action: pre-scale
+
+slo:
+  max_p95_latency_ms: 100
+  max_error_rate: 0.01
+
+cost_weights:
+  w_slo_violation: 1.0
+  w_latency_impact: 0.5
+  w_resource_overhead: 0.2
+  w_failure_penalty: 5.0

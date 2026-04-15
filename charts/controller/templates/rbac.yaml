@@ -1,0 +1,82 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "controller.serviceAccountName" . }}
+  labels:
+    {{- include "controller.labels" . | nindent 4 }}
+automountServiceAccountToken: true
+{{- if .Values.rbac.create }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "controller.fullname" . }}
+  labels:
+    {{- include "controller.labels" . | nindent 4 }}
+rules:
+  # OrchestratedRollout CR
+  - apiGroups: ["rollout.orchestrated.io"]
+    resources: ["orchestratedrollouts"]
+    verbs: [get, list, watch, update, patch]
+  - apiGroups: ["rollout.orchestrated.io"]
+    resources: ["orchestratedrollouts/status"]
+    verbs: [get, update, patch]
+  # Argo Rollouts
+  - apiGroups: ["argoproj.io"]
+    resources: ["rollouts"]
+    verbs: [get, list, watch, create, update, patch]
+  - apiGroups: ["argoproj.io"]
+    resources: ["rollouts/status"]
+    verbs: [get]
+  # Core resources (read-only)
+  - apiGroups: [""]
+    resources: [pods, services, endpoints, nodes]
+    verbs: [get, list, watch]
+  # Services (write — needed for canary service management)
+  - apiGroups: [""]
+    resources: [services]
+    verbs: [create, update, patch]
+  # Deployments / ReplicaSets (read-only)
+  - apiGroups: ["apps"]
+    resources: [deployments, replicasets]
+    verbs: [get, list, watch]
+  # Autoscaling (read-only)
+  - apiGroups: ["autoscaling"]
+    resources: [horizontalpodautoscalers]
+    verbs: [get, list, watch]
+  # Networking (read + canary ingress management)
+  - apiGroups: ["networking.k8s.io"]
+    resources: [ingresses]
+    verbs: [get, list, watch, create, update, patch]
+  # CRDs (needed by kopf for resource discovery)
+  - apiGroups: ["apiextensions.k8s.io"]
+    resources: ["customresourcedefinitions"]
+    verbs: [get, list, watch]
+  # Events
+  - apiGroups: [""]
+    resources: [events]
+    verbs: [create, patch]
+  # ConfigMap (for policy artifacts — read-only)
+  - apiGroups: [""]
+    resources: [configmaps]
+    verbs: [get, list, watch]
+  # Leader election
+  - apiGroups: ["coordination.k8s.io"]
+    resources: [leases]
+    verbs: [get, create, update]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "controller.fullname" . }}
+  labels:
+    {{- include "controller.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "controller.fullname" . }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "controller.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}

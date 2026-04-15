@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "ml-workload.fullname" . }}
+  labels:
+    {{- include "ml-workload.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "ml-workload.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "ml-workload.selectorLabels" . | nindent 8 }}
+        version: {{ .Values.mlWorkload.version | quote }}
+        app: {{ include "ml-workload.fullname" . }}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "{{ .Values.mlWorkload.port }}"
+        prometheus.io/path: "/metrics"
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        fsGroup: 65534
+      containers:
+        - name: ml-workload
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          env:
+            - name: PORT
+              value: "{{ .Values.mlWorkload.port }}"
+            - name: VERSION
+              value: "{{ .Values.mlWorkload.version }}"
+            - name: WARMUP_DELAY_SECS
+              value: "{{ .Values.mlWorkload.warmupDelaySecs }}"
+            - name: MODEL_PATH
+              value: "{{ .Values.mlWorkload.modelPath }}"
+          ports:
+            - containerPort: {{ .Values.mlWorkload.port }}
+              name: http
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: {{ .Values.mlWorkload.port }}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: {{ .Values.mlWorkload.port }}
+            initialDelaySeconds: 3
+            periodSeconds: 5
+            failureThreshold: 20
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}

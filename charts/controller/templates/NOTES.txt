@@ -1,0 +1,26 @@
+The OrchestratedRollout controller has been deployed.
+
+Release: {{ .Release.Name }}
+Namespace: {{ .Release.Namespace }}
+
+The controller is watching for OrchestratedRollout custom resources
+cluster-wide. To verify the deployment:
+
+  kubectl get pods -n {{ .Release.Namespace }} -l {{ include "controller.selectorLabels" . | replace ": " "=" | replace "\n" "," }}
+  kubectl logs -n {{ .Release.Namespace }} -l {{ include "controller.selectorLabels" . | replace ": " "=" | replace "\n" "," }}
+
+To create a rollout:
+
+  kubectl apply -f - <<EOF
+  apiVersion: rollout.orchestrated.io/v1alpha1
+  kind: OrchestratedRollout
+  metadata:
+    name: my-rollout
+    namespace: {{ .Release.Namespace }}
+  spec:
+    targetRef:
+      name: workload
+    release:
+      image: your-image
+      tag: v2.0.0
+  EOF

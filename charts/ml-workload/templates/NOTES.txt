@@ -1,0 +1,13 @@
+ML Workload deployed.
+
+Service endpoints:
+  - Inference:  POST/GET http://{{ .Values.ingress.host }}/inference
+  - Health:     GET http://{{ .Values.ingress.host }}/healthz
+  - Readiness:  GET http://{{ .Values.ingress.host }}/readyz
+  - Metrics:    GET http://{{ .Values.ingress.host }}/metrics
+
+Model: MobileNetV2 (ONNX Runtime, CPU)
+Warm-up delay: {{ .Values.mlWorkload.warmupDelaySecs }}s
+
+To trigger an OrchestratedRollout:
+  kubectl apply -f experiments/ml-orchestrated-rollout.yaml -n orchestrated-rollout

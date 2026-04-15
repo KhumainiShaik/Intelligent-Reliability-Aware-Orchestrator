@@ -1,0 +1,71 @@
+# LitmusChaos Pod Kill Experiment
+# Kills pods in the workload namespace during rollout windows
+apiVersion: litmuschaos.io/v1alpha1
+kind: ChaosEngine
+metadata:
+  name: workload-pod-kill
+  namespace: orchestrated-rollout
+  labels:
+    app.kubernetes.io/part-of: orchestrated-rollout
+    experiment: pod-kill
+spec:
+  appinfo:
+    appns: orchestrated-rollout
+    applabel: "app=workload"
+    appkind: deployment
+  engineState: active
+  chaosServiceAccount: litmus-admin
+  experiments:
+    - name: pod-delete
+      spec:
+        components:
+          env:
+            - name: TOTAL_CHAOS_DURATION
+              value: "30"
+            - name: CHAOS_INTERVAL
+              value: "10"
+            - name: FORCE
+              value: "false"
+            - name: PODS_AFFECTED_PERC
+              value: "50"
+        probe: []
+---
+# ServiceAccount for LitmusChaos
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: litmus-admin
+  namespace: orchestrated-rollout
+  labels:
+    app.kubernetes.io/part-of: orchestrated-rollout
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: litmus-admin
+rules:
+  - apiGroups: [""]
+    resources: [pods, events, configmaps, secrets, services]
+    verbs: [get, list, watch, create, update, patch, delete, deletecollection]
+  - apiGroups: ["apps"]
+    resources: [deployments, replicasets, statefulsets, daemonsets]
+    verbs: [get, list, watch, update, patch]
+  - apiGroups: ["batch"]
+    resources: [jobs]
+    verbs: [get, list, watch, create, delete, deletecollection]
+  - apiGroups: ["litmuschaos.io"]
+    resources: [chaosengines, chaosexperiments, chaosresults]
+    verbs: [get, list, watch, create, update, patch, delete]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: litmus-admin
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: litmus-admin
+subjects:
+  - kind: ServiceAccount
+    name: litmus-admin
+    namespace: orchestrated-rollout
