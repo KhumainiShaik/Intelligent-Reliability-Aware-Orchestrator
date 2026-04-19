@@ -13,7 +13,18 @@ spec:
       targetPort: {{ .Values.service.targetPort }}
       name: http
   selector:
+    {{- /*
+      Argo Rollouts patches Service selectors (adds rollouts-pod-template-hash).
+      If Helm later re-applies the base selector, server-side apply can conflict.
+      Preserve the live selector when the Service already exists.
+    */ -}}
+    {{- $stableName := printf "%s-stable" (include "workload.fullname" .) -}}
+    {{- $stableSvc := lookup "v1" "Service" .Release.Namespace $stableName -}}
+    {{- if and $stableSvc $stableSvc.spec $stableSvc.spec.selector -}}
+    {{- toYaml $stableSvc.spec.selector | nindent 4 }}
+    {{- else -}}
     {{- include "workload.selectorLabels" . | nindent 4 }}
+    {{- end }}
 ---
 # Canary service — used during canary rollouts
 apiVersion: v1
@@ -30,7 +41,14 @@ spec:
       targetPort: {{ .Values.service.targetPort }}
       name: http
   selector:
+    {{- /* Same preservation logic as stable Service. */ -}}
+    {{- $canaryName := printf "%s-canary" (include "workload.fullname" .) -}}
+    {{- $canarySvc := lookup "v1" "Service" .Release.Namespace $canaryName -}}
+    {{- if and $canarySvc $canarySvc.spec $canarySvc.spec.selector -}}
+    {{- toYaml $canarySvc.spec.selector | nindent 4 }}
+    {{- else -}}
     {{- include "workload.selectorLabels" . | nindent 4 }}
+    {{- end }}
 ---
 # Primary service (general)
 apiVersion: v1

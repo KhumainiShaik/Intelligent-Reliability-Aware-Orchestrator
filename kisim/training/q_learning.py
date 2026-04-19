@@ -27,14 +27,14 @@ logger = logging.getLogger(__name__)
 
 
 # Feature specification for discretisation
-# Reduced bins for better Q-table coverage
-# Compact state: stress_score captures current health AND future forecast
-# (forecast is folded into stress_score via max operator in environment.py).
-# cpu_util captures resource head-room for pre-scale scheduling.
-# Total state space: 5x2 = 10 states x 4 actions = 40 state-action pairs
+# Reduced bins for better Q-table coverage.
+# Compact state: stress_score captures current health; cpu_util captures
+# resource headroom; stress_forecast captures short-horizon load acceleration.
+# Total state space: 5x2x2 = 20 states × 4 actions = 80 state-action pairs (max).
 FEATURE_SPEC = [
     {"name": "stress_score", "min_val": 0.0, "max_val": 1.0, "num_bins": 5},
     {"name": "cpu_util", "min_val": 0.0, "max_val": 1.0, "num_bins": 2},
+    {"name": "stress_forecast", "min_val": 0.0, "max_val": 0.5, "num_bins": 2},
 ]
 
 ACTIONS = [a.value for a in RolloutAction]

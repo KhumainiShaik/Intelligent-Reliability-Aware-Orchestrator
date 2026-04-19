@@ -3,7 +3,7 @@
 
 experiment:
   name: "orchestrated-rollout-evaluation"
-  description: "Compare RL policy vs rule-based vs fixed baselines"
+  description: "Compare RL policy vs fixed baselines (5 modes × 9 scenarios × 5 repeats = 225 trials)"
   repeats_per_scenario: 5
 
 scenarios:
@@ -36,9 +36,11 @@ scenarios:
   policies:
     - name: rl-policy
       type: rl
-      artifact: kisim/artifacts/v1/policy_artifact.json
-    - name: rule-based
-      type: rule-based
+      artifact: artifacts/v10b/policy_artifact.json
+    # rule-based is supported by the controller but excluded from the main
+    # experiment grid (5 modes tested: rl + 4 fixed baselines = 225 trials).
+    # - name: rule-based
+    #   type: rule-based
     - name: fixed-rolling
       type: fixed
       action: rolling
