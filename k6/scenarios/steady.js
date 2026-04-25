@@ -40,7 +40,7 @@ export default function () {
             try {
                 const body = JSON.parse(r.body);
                 return body.prediction !== undefined;
-            } catch {
+            } catch (e) {
                 return false;
             }
         },
