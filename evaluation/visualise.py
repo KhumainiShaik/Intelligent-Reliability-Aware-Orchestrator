@@ -82,9 +82,13 @@ def plot_stress_vs_action(df: pd.DataFrame, output_path: str):
 
     for action in df["chosen_action"].unique():
         subset = df[df["chosen_action"] == action]
+        if "outcome_computed_cost" in subset.columns:
+            y = subset["outcome_computed_cost"]
+        else:
+            y = np.zeros(len(subset))
         ax.scatter(
             subset["stress_score"],
-            subset.get("outcome_computed_cost", 0),
+            y,
             label=action,
             alpha=0.5,
             s=20,
@@ -116,7 +120,10 @@ def plot_slo_violations(df: pd.DataFrame, output_path: str):
         for p in policies
     ]
 
-    bp = ax.boxplot(data, labels=policies, patch_artist=True)
+    try:
+        bp = ax.boxplot(data, tick_labels=policies, patch_artist=True)
+    except TypeError:
+        bp = ax.boxplot(data, labels=policies, patch_artist=True)
     for patch, policy in zip(bp["boxes"], policies, strict=False):
         patch.set_facecolor(COLORS.get(policy.split("-")[0] if "-" in policy else policy, "#ccc"))
         patch.set_alpha(0.7)

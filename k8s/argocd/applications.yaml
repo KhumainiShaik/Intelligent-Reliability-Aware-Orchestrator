@@ -1,3 +1,9 @@
+# Example Argo CD Applications.
+#
+# For live GKE validation, prefer scripts/gke/12_deploy_gitops_apps.sh because
+# it renders these Applications with the current Git repo URL/revision and
+# Artifact Registry image overrides.
+---
 # Argo CD Application — Workload (Helm)
 apiVersion: argoproj.io/v1alpha1
 kind: Application

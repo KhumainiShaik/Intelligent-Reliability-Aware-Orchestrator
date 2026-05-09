@@ -15,7 +15,7 @@ PYTHON ?= python3
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
-# Build
+# ---------- Build ----------
 .PHONY: build-workload
 build-workload: ## Build the workload Go binary
 	cd workload && CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -o ../bin/workload .
@@ -23,7 +23,7 @@ build-workload: ## Build the workload Go binary
 .PHONY: build
 build: build-workload ## Build all binaries
 
-# Controller (Python)
+# ---------- Controller (Python) ----------
 .PHONY: controller-deps
 controller-deps: ## Install Python controller dependencies
 	$(PYTHON) -m pip install -r controller/requirements.txt
@@ -37,7 +37,7 @@ controller-lint: ## Lint Python controller
 	$(PYTHON) -m ruff check controller/
 	$(PYTHON) -m mypy controller/ --ignore-missing-imports
 
-# Docker
+# ---------- Docker ----------
 .PHONY: docker-controller
 docker-controller: ## Build controller Docker image (Python)
 	docker build -t $(CONTROLLER_IMG) -f controller/Dockerfile .
@@ -54,25 +54,34 @@ kind-load: ## Load controller+workload images into kind cluster
 	kind load docker-image $(CONTROLLER_IMG) --name $(KIND_CLUSTER)
 	kind load docker-image $(WORKLOAD_IMG) --name $(KIND_CLUSTER)
 
-.PHONY: require-scripts
-require-scripts: ## Check that scripts/ folder exists
-	@test -d scripts || (echo "ERROR: scripts/ folder not found. This repo intentionally does not commit scripts; copy them into ./scripts/ and re-run." >&2; exit 2)
-
 .PHONY: setup-kind
-setup-kind: require-scripts ## Create kind cluster + monitoring + GitOps (Argo CD/Rollouts)
+setup-kind: ## Create kind cluster + monitoring + GitOps (Argo CD/Rollouts)
 	./scripts/01_setup_cluster.sh
 	./scripts/02_setup_monitoring.sh
 	./scripts/03_setup_gitops.sh
+	./scripts/04_setup_litmus.sh
 
 .PHONY: demo-compare
-demo-compare: require-scripts ## Run the spike comparison (auto ingress port-forward)
+demo-compare: ## Run the spike comparison (auto ingress port-forward)
 	AUTO_PORT_FORWARD=1 bash ./scripts/run_comparison.sh
 
 .PHONY: demo-e2e
-demo-e2e: require-scripts ## Run a single e2e scenario (default: steady)
+demo-e2e: ## Run a single e2e scenario (default: steady)
 	AUTO_PORT_FORWARD=1 bash ./scripts/run_e2e_experiment.sh steady
 
-# Deploy (Helm)
+# ---------- Test ----------
+.PHONY: test-workload
+test-workload: ## Run Go workload tests
+	cd workload && go test ./... -v -count=1
+
+.PHONY: test-controller
+test-controller: ## Run Python controller tests
+	$(PYTHON) -m pytest tests/ -v
+
+.PHONY: test
+test: test-workload test-controller ## Run all tests
+
+# ---------- Deploy (Helm) ----------
 .PHONY: install-crd
 install-crd: ## Install CRDs into cluster
 	kubectl apply -f charts/controller/crds/
@@ -95,7 +104,7 @@ deploy-monitoring: ## Deploy Prometheus stack (Helm)
 .PHONY: deploy-all
 deploy-all: install-crd deploy-monitoring deploy-controller deploy-workload ## Deploy everything
 
-# k6
+# ---------- k6 ----------
 .PHONY: k6-steady
 k6-steady: ## Run k6 steady load test
 	k6 run k6/scenarios/steady.js
@@ -120,7 +129,7 @@ k6-azure-functions: ## Run k6 Azure Functions burst scenario (trace-calibrated)
 k6-alibaba: ## Run k6 Alibaba cluster pressure scenario (trace-calibrated)
 	k6 run k6/scenarios/alibaba_pressure.js
 
-# KISim
+# ---------- KISim ----------
 .PHONY: kisim-train
 kisim-train: ## Train RL policy offline
 	cd kisim && $(PYTHON) -m training.train --episodes 50000 --seed 42
@@ -129,7 +138,7 @@ kisim-train: ## Train RL policy offline
 kisim-eval: ## Evaluate trained policy
 	cd kisim && $(PYTHON) -m training.evaluate
 
-# Clean
+# ---------- Clean ----------
 .PHONY: clean
 clean: ## Remove build artifacts
 	rm -rf bin/ coverage.out coverage.html __pycache__ controller/__pycache__

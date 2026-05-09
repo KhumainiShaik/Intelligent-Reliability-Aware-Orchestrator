@@ -7,7 +7,7 @@ weighted normalisation of individual signals plus EWMA trend detection.
 Method selected: **Short-horizon trend model (EWMA + change detection)**
 
 Rationale
-
+---------
 The architecture offers two approaches for StressScore:
     (a) schedule-aware stress flag — an external experiment harness sets a
         binary/ordinal stress level before each trial;
@@ -36,16 +36,16 @@ in *evaluation labelling* to bucket episodes by stress tier, but is **not**
 fed into the StressScore computation itself.
 
 Signal weights
-
-    latency      (p95)        0.25   — primary SLO indicator
-    error_rate   (5xx ratio)  0.25   — primary reliability indicator
-    pending_pods              0.15   — scheduling pressure
-    node_cpu                  0.15   — compute headroom
-    node_mem                  0.10   — memory headroom
-    hpa_gap                   0.10   — autoscaler lag
+--------------
+  latency      (p95)        0.25   — primary SLO indicator
+  error_rate   (5xx ratio)  0.25   — primary reliability indicator
+  pending_pods              0.15   — scheduling pressure
+  node_cpu                  0.15   — compute headroom
+  node_mem                  0.10   — memory headroom
+  hpa_gap                   0.10   — autoscaler lag
 
 EWMA trend boost
-
+-----------------
 If the current p95 latency exceeds the EWMA by > 20 %, a capped bonus
 (up to +0.20) is added to the score.  This makes the controller more
 conservative when latency is actively *rising*, even if the absolute
@@ -65,7 +65,6 @@ if TYPE_CHECKING:
 
 def _clamp(v: float, lo: float = 0.0, hi: float = 1.0) -> float:
     return max(lo, min(hi, v))
-
 
 @dataclass
 class Calculator:
@@ -148,7 +147,9 @@ class Calculator:
             self._ewma_rps = snap.rps
             self._initialised = True
         else:
-            self._ewma_latency = self.alpha * p95_safe + (1 - self.alpha) * self._ewma_latency
+            self._ewma_latency = (
+                self.alpha * p95_safe + (1 - self.alpha) * self._ewma_latency
+            )
             self._ewma_rps = self.alpha * snap.rps + (1 - self.alpha) * self._ewma_rps
 
         # Trend boost: rising latency above EWMA → additional stress

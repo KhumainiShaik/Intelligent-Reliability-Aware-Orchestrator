@@ -1,0 +1,31 @@
+{{- if .Values.orchestratedRollout.enabled }}
+apiVersion: rollout.orchestrated.io/v1alpha1
+kind: OrchestratedRollout
+metadata:
+  name: {{ include "portable-workload.fullname" . }}-portability-template
+  labels:
+    {{- include "portable-workload.labels" . | nindent 4 }}
+    portability.orchestrated.io/template: "true"
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "portable-workload.fullname" . }}
+  release:
+    image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+    tag: {{ .Values.workload.version | quote }}
+  actionSet:
+    {{- range .Values.orchestratedRollout.actionSet }}
+    - {{ . | quote }}
+    {{- end }}
+  slo:
+    maxP95LatencyMs: {{ .Values.slo.p95Ms }}
+    maxErrorRate: 0.01
+  rolloutHints:
+    trafficProfile: {{ .Values.orchestratedRollout.trafficProfile | quote }}
+    objective: {{ .Values.orchestratedRollout.objective | quote }}
+    policyVariant: {{ .Values.orchestratedRollout.policyVariant | quote }}
+    faultContext: {{ .Values.orchestratedRollout.faultContext | quote }}
+    warmUpClass: {{ .Values.modelProfile.coldStartClass | quote }}
+    imageSizeClass: {{ .Values.modelProfile.sizeClass | quote }}
+{{- end }}

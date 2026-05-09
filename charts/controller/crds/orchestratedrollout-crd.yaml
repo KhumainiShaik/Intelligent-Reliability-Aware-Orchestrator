@@ -71,7 +71,7 @@ spec:
                   type: array
                   items:
                     type: string
-                    enum: [delay, pre-scale, canary, rolling]
+                    enum: [rl, rule-based, rolling, canary, pre-scale, delay]
                 slo:
                   type: object
                   properties:
@@ -91,6 +91,27 @@ spec:
                     imageSizeClass:
                       type: string
                       enum: [small, medium, large]
+                    trafficProfile:
+                      type: string
+                      enum: [steady, ramp, spike, unknown]
+                      description: Optional release-pipeline context used as an advisory hint by the policy layer.
+                    objective:
+                      type: string
+                      enum: [reliability, latency, balanced, cost, unknown]
+                      description: Optional release objective used with trafficProfile; reliability favours safer pre-scale choices.
+                    policyVariant:
+                      type: string
+                      enum: [v12-contextual, v11, default]
+                      description: Optional adaptive policy variant; v12-contextual is opt-in and v11 remains the default.
+                    faultContext:
+                      type: string
+                      enum: [none, pod-kill, network-latency]
+                      description: Optional experiment fault context used by contextual policy variants.
+                    preScaleExtraReplicas:
+                      type: integer
+                      format: int32
+                      minimum: 0
+                      description: Optional explicit extra replica headroom for pre-scale experiments; guardrails still cap the final value.
                 policyVersion:
                   type: string
                 guardrailConfig:
@@ -124,6 +145,9 @@ spec:
                   format: date-time
                 stressScore:
                   type: number
+                preScaleExtraReplicas:
+                  type: integer
+                  format: int32
                 message:
                   type: string
                 conditions:

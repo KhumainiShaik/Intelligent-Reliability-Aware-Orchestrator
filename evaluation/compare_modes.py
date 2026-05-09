@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -31,37 +32,54 @@ logger = logging.getLogger(__name__)
 SLO_P95_LATENCY_MS = 100.0
 SLO_ERROR_RATE = 0.01
 
-# Cost weights (from 02_component_behaviors_spec.md)
+# Cost weights (from 02_component_behaviors_spec.md).  This comparison report
+# has no per-trial replica telemetry, so resource overhead is reported by the
+# detailed episode analyser rather than folded into this summary score.
 W_SLO_VIOLATION = 1.0
 W_LATENCY_IMPACT = 0.5
 W_RESOURCE_OVERHEAD = 0.2
 W_FAILURE_PENALTY = 5.0
+W_ERROR_IMPACT = float(os.environ.get("W_ERROR_IMPACT", str(W_FAILURE_PENALTY)))
 
-# Mode → correct shard suffix
+# Mode -> preferred historical shard suffix.
+#
+# Older comparison folders may contain partial duplicate runs for a mode. These
+# preferred suffixes preserve the previous canonical 2026-04-06 analysis. New
+# runs can use any shard count; if the preferred suffix is absent, the loader
+# selects the available shard group with the most trial summaries.
 MODE_SHARD_OF = {
     "rl": "-of-9",
+    "rl-v11": "-of-3",
+    "rl-v12": "-of-3",
     "baseline-rolling": "-of-5",
     "baseline-canary": "-of-4",
     "baseline-delay": "-of-5",
     "baseline-pre-scale": "-of-4",
+    "baseline-rule-based": "-of-4",
 }
 
 # Display names for modes
 MODE_LABELS = {
-    "rl": "RL (v10b)",
+    "rl": os.environ.get("RL_MODE_LABEL", "RL / Adaptive"),
+    "rl-v11": "RL v11",
+    "rl-v12": "RL v12 Contextual",
     "baseline-rolling": "Rolling",
     "baseline-canary": "Canary",
     "baseline-delay": "Delay",
     "baseline-pre-scale": "Pre-Scale",
+    "baseline-rule-based": "Rule-based",
 }
 
 # Colours for plots
 MODE_COLORS = {
     "rl": "#2196F3",
+    "rl-v11": "#42A5F5",
+    "rl-v12": "#0D47A1",
     "baseline-rolling": "#607D8B",
     "baseline-canary": "#F44336",
     "baseline-delay": "#4CAF50",
     "baseline-pre-scale": "#9C27B0",
+    "baseline-rule-based": "#FF9800",
 }
 
 plt.rcParams.update({
@@ -145,11 +163,19 @@ def parse_k6_summary(path: Path) -> dict | None:
 
     slo_breach = (p95 is not None and p95 > SLO_P95_LATENCY_MS) or (error_rate is not None and error_rate > SLO_ERROR_RATE)
 
-    # Composite cost
+    # Composite cost: include error magnitude, not only a binary breach flag.
+    # Without this term, a trial with severe failed-request rate can look
+    # artificially good when its successful responses have low P95 latency.
     latency_norm = np.clip((p95 / SLO_P95_LATENCY_MS - 1.0), 0, 10) / 10.0 if p95 else 0.0
+    error_norm = (
+        np.clip((error_rate / SLO_ERROR_RATE - 1.0), 0, 10) / 10.0
+        if error_rate is not None and SLO_ERROR_RATE > 0
+        else 0.0
+    )
     cost = (
         W_SLO_VIOLATION * (1.0 if slo_breach else 0.0)
         + W_LATENCY_IMPACT * float(latency_norm)
+        + W_ERROR_IMPACT * float(error_norm)
     )
 
     return {
@@ -166,23 +192,52 @@ def parse_k6_summary(path: Path) -> dict | None:
     }
 
 
+def _mode_shard_group(path: Path, mode: str) -> str | None:
+    marker = f"_{mode}_shard"
+    if marker not in path.name:
+        return None
+    try:
+        return f"-of-{path.name.rsplit('-of-', 1)[1]}"
+    except IndexError:
+        return None
+
+
+def _trial_summary_count(shard_dirs: list[Path]) -> int:
+    return sum(1 for shard_dir in shard_dirs for _ in shard_dir.rglob("trial_*_summary.json"))
+
+
+def _find_mode_shard_dirs(experiments_dir: Path, mode: str) -> list[Path]:
+    candidates = sorted(
+        d for d in experiments_dir.iterdir()
+        if d.is_dir() and f"_{mode}_shard" in d.name
+    )
+    if not candidates:
+        return []
+
+    groups: dict[str, list[Path]] = {}
+    for candidate in candidates:
+        suffix = _mode_shard_group(candidate, mode)
+        if suffix is None:
+            continue
+        groups.setdefault(suffix, []).append(candidate)
+
+    preferred_suffix = MODE_SHARD_OF.get(mode)
+    if preferred_suffix in groups:
+        return sorted(groups[preferred_suffix])
+
+    suffix, shard_dirs = max(
+        groups.items(),
+        key=lambda item: (_trial_summary_count(item[1]), len(item[1]), item[0]),
+    )
+    logger.info("Using shard group %s for mode %s", suffix, mode)
+    return sorted(shard_dirs)
+
+
 def load_all_trials(experiments_dir: Path) -> pd.DataFrame:
     """Load k6 trial summaries from correct shard directories only."""
     rows = []
-    for mode, shard_suffix in MODE_SHARD_OF.items():
-        # Find top-level shard dirs for this mode
-        shard_dirs = sorted(
-            d for d in experiments_dir.iterdir()
-            if d.is_dir()
-            and f"_{mode}_shard" in d.name
-            and d.name.endswith(shard_suffix.lstrip("-"))  # ends with e.g. "of-9"
-        )
-        # More robust: match pattern grid_*_{mode}_shard*{shard_suffix}
-        shard_dirs = sorted(
-            d for d in experiments_dir.iterdir()
-            if d.is_dir() and f"_{mode}_shard" in d.name and shard_suffix in d.name
-        )
-
+    for mode in MODE_SHARD_OF:
+        shard_dirs = _find_mode_shard_dirs(experiments_dir, mode)
         for shard_dir in shard_dirs:
             for combo_dir in sorted(shard_dir.iterdir()):
                 if not combo_dir.is_dir():
@@ -289,7 +344,7 @@ def generate_report(df: pd.DataFrame, output_dir: Path):
     combo_df.to_csv(output_dir / "combo_breakdown.csv", index=False)
 
     # ---- 3. Pairwise Mann-Whitney U ----
-    modes = list(MODE_SHARD_OF.keys())
+    modes = [mode for mode in MODE_SHARD_OF if len(df[df["mode"] == mode]) > 0]
     pairwise = {}
     for metric in ("p95_ms", "error_rate", "cost"):
         for i, m1 in enumerate(modes):
@@ -393,17 +448,17 @@ def generate_plots(df: pd.DataFrame, summary_df: pd.DataFrame, scenario_df: pd.D
 
     # ---- 3. Error rate comparison ----
     fig, ax = plt.subplots(figsize=(10, 6))
-    means_err = [summary_df[summary_df["mode"] == m]["error_rate_mean"].values[0] for m in modes_ordered]
-    ci_lo_err = [summary_df[summary_df["mode"] == m]["error_rate_ci_lo"].values[0] for m in modes_ordered]
-    ci_hi_err = [summary_df[summary_df["mode"] == m]["error_rate_ci_hi"].values[0] for m in modes_ordered]
+    means_err = [summary_df[summary_df["mode"] == m]["error_rate_mean"].values[0] * 100 for m in modes_ordered]
+    ci_lo_err = [summary_df[summary_df["mode"] == m]["error_rate_ci_lo"].values[0] * 100 for m in modes_ordered]
+    ci_hi_err = [summary_df[summary_df["mode"] == m]["error_rate_ci_hi"].values[0] * 100 for m in modes_ordered]
     errors_err = np.array([[m - lo for m, lo in zip(means_err, ci_lo_err)],
                            [hi - m for m, hi in zip(means_err, ci_hi_err)]])
     ax.bar(range(len(labels)), means_err, yerr=errors_err, capsize=5, color=colors,
            edgecolor="black", linewidth=0.5, alpha=0.85)
-    ax.axhline(y=SLO_ERROR_RATE, color="red", linestyle="--", linewidth=1, label=f"SLO = {SLO_ERROR_RATE}")
+    ax.axhline(y=SLO_ERROR_RATE * 100, color="red", linestyle="--", linewidth=1, label=f"SLO = {SLO_ERROR_RATE * 100:.1f}%")
     ax.set_xticks(range(len(labels)))
     ax.set_xticklabels(labels, rotation=20, ha="right")
-    ax.set_ylabel("Error Rate")
+    ax.set_ylabel("Error Rate (%)")
     ax.set_title("Mean Error Rate by Mode (95% CI)")
     ax.legend()
     ax.grid(axis="y", alpha=0.3)
@@ -465,11 +520,27 @@ def generate_plots(df: pd.DataFrame, summary_df: pd.DataFrame, scenario_df: pd.D
     fig.savefig(plots_dir / "cost_per_combo.png")
     plt.close(fig)
 
-    # ---- 7. Heatmap: SLO breach % per scenario×fault (RL only vs best baseline) ----
-    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+    # ---- 7. Heatmap: SLO breach % per scenario×fault (RL vs best available baseline) ----
+    heatmap_modes = []
+    if "rl" in modes_ordered:
+        heatmap_modes.append("rl")
+    baseline_modes = [m for m in modes_ordered if m != "rl"]
+    if baseline_modes:
+        best_baseline_mode = (
+            summary_df[summary_df["mode"].isin(baseline_modes)]
+            .sort_values("cost_mean")
+            .iloc[0]["mode"]
+        )
+        heatmap_modes.append(best_baseline_mode)
+    if not heatmap_modes:
+        heatmap_modes = modes_ordered[:1]
+
+    fig, axes = plt.subplots(1, len(heatmap_modes), figsize=(7 * len(heatmap_modes), 5))
+    if len(heatmap_modes) == 1:
+        axes = [axes]
     scenarios = sorted(df["scenario"].unique())
     faults = sorted(df["fault"].unique())
-    for ax_idx, m in enumerate(["rl", "baseline-rolling"]):
+    for ax_idx, m in enumerate(heatmap_modes):
         ax = axes[ax_idx]
         matrix = np.zeros((len(scenarios), len(faults)))
         for si, s in enumerate(scenarios):
@@ -489,7 +560,7 @@ def generate_plots(df: pd.DataFrame, summary_df: pd.DataFrame, scenario_df: pd.D
                     ax.text(fi, si, f"{val:.0f}%", ha="center", va="center", fontsize=9,
                             color="white" if val > 50 else "black")
     fig.colorbar(im, ax=axes, shrink=0.6, label="Breach %")
-    plt.suptitle("SLO Breach Heatmap: RL vs Rolling Baseline")
+    plt.suptitle("SLO Breach Heatmap: " + " vs ".join(MODE_LABELS[m] for m in heatmap_modes))
     plt.tight_layout()
     fig.savefig(plots_dir / "slo_breach_heatmap.png")
     plt.close(fig)
@@ -505,14 +576,14 @@ def _generate_summary_table(summary_df: pd.DataFrame, output_path: Path):
     fig, ax = plt.subplots(figsize=(12, 3))
     ax.axis("off")
 
-    headers = ["Mode", "N", "P95 (ms)", "Error Rate", "Cost", "SLO Breach %"]
+    headers = ["Mode", "N", "P95 (ms)", "Error Rate (%)", "Cost", "SLO Breach %"]
     rows = []
     for _, r in summary_df.iterrows():
         rows.append([
             r["label"],
             int(r["n_trials"]),
             f"{r['p95_ms_mean']:.1f} [{r['p95_ms_ci_lo']:.1f}, {r['p95_ms_ci_hi']:.1f}]",
-            f"{r['error_rate_mean']:.4f} [{r['error_rate_ci_lo']:.4f}, {r['error_rate_ci_hi']:.4f}]",
+            f"{r['error_rate_mean'] * 100:.2f} [{r['error_rate_ci_lo'] * 100:.2f}, {r['error_rate_ci_hi'] * 100:.2f}]",
             f"{r['cost_mean']:.3f} [{r['cost_ci_lo']:.3f}, {r['cost_ci_hi']:.3f}]",
             f"{r['slo_breach_pct']:.0f}%",
         ])
@@ -548,20 +619,34 @@ def generate_markdown_report(df: pd.DataFrame, summary_df: pd.DataFrame, pairwis
     with open(pairwise_path) as f:
         pairwise = json.load(f)
 
+    def fmt_pairwise_metric(metric: str, value: float) -> str:
+        if metric == "error_rate":
+            return f"{value * 100:.2f}%"
+        return f"{value:.4f}"
+
+    present_modes = summary_df.sort_values("cost_mean")["label"].tolist()
+    trial_counts = sorted(df.groupby(["mode", "combo"])["trial"].nunique().unique())
+    if len(trial_counts) == 1:
+        trials_per_combo = str(trial_counts[0])
+    else:
+        trials_per_combo = f"{trial_counts[0]}-{trial_counts[-1]}"
+
     lines = [
-        "# Orchestrated Rollout — Five-Mode Comparison Results",
+        "# Orchestrated Rollout — Mode Comparison Results",
         "",
         "## Experimental Setup",
-        f"- **Modes**: {', '.join(MODE_LABELS.values())}",
+        f"- **Modes**: {', '.join(present_modes)}",
         f"- **Scenarios**: {', '.join(sorted(df['scenario'].unique()))}",
         f"- **Faults**: {', '.join(sorted(df['fault'].unique()))}",
-        "- **Trials per combo**: 5",
+        f"- **Trials per combo**: {trials_per_combo}",
         f"- **Total trials**: {len(df)}",
-        f"- **SLO**: P95 latency < {SLO_P95_LATENCY_MS} ms, error rate < {SLO_ERROR_RATE}",
+        f"- **SLO**: P95 latency < {SLO_P95_LATENCY_MS} ms, error rate < {SLO_ERROR_RATE * 100:.1f}%",
+        f"- **Composite cost**: SLO breach + latency impact + failed-request impact "
+        f"(weights {W_SLO_VIOLATION:.1f}, {W_LATENCY_IMPACT:.1f}, {W_ERROR_IMPACT:.1f})",
         "",
         "## Summary Table",
         "",
-        "| Mode | N | P95 (ms) | Error Rate | Cost | SLO Breach % |",
+        "| Mode | N | P95 (ms) | Error Rate (%) | Cost | SLO Breach % |",
         "|------|---|----------|------------|------|-------------|",
     ]
 
@@ -570,7 +655,7 @@ def generate_markdown_report(df: pd.DataFrame, summary_df: pd.DataFrame, pairwis
         lines.append(
             f"| {r['label']} | {int(r['n_trials'])} | "
             f"{r['p95_ms_mean']:.1f} [{r['p95_ms_ci_lo']:.1f}, {r['p95_ms_ci_hi']:.1f}] | "
-            f"{r['error_rate_mean']:.4f} [{r['error_rate_ci_lo']:.4f}, {r['error_rate_ci_hi']:.4f}] | "
+            f"{r['error_rate_mean'] * 100:.2f} [{r['error_rate_ci_lo'] * 100:.2f}, {r['error_rate_ci_hi'] * 100:.2f}] | "
             f"{r['cost_mean']:.3f} [{r['cost_ci_lo']:.3f}, {r['cost_ci_hi']:.3f}] | "
             f"{r['slo_breach_pct']:.0f}% |"
         )
@@ -584,15 +669,17 @@ def generate_markdown_report(df: pd.DataFrame, summary_df: pd.DataFrame, pairwis
     # Find best / worst
     best = summary_df.loc[summary_df["cost_mean"].idxmin()]
     worst = summary_df.loc[summary_df["cost_mean"].idxmax()]
+    best_error = summary_df.loc[summary_df["error_rate_mean"].idxmin()]
     rl_row = summary_df[summary_df["mode"] == "rl"]
 
     lines.append(f"1. **Best performer**: {best['label']} (cost = {best['cost_mean']:.3f})")
     lines.append(f"2. **Worst performer**: {worst['label']} (cost = {worst['cost_mean']:.3f})")
+    lines.append(f"3. **Lowest error rate**: {best_error['label']} (error rate = {best_error['error_rate_mean'] * 100:.2f}%)")
 
     if not rl_row.empty:
         rl = rl_row.iloc[0]
         rank = list(summary_df.sort_values("cost_mean")["mode"]).index("rl") + 1
-        lines.append(f"3. **RL rank**: #{rank} of {len(summary_df)} modes (cost = {rl['cost_mean']:.3f}, SLO breach = {rl['slo_breach_pct']:.0f}%)")
+        lines.append(f"4. **RL/adaptive rank**: #{rank} of {len(summary_df)} modes (cost = {rl['cost_mean']:.3f}, SLO breach = {rl['slo_breach_pct']:.0f}%)")
 
     lines += ["", "## Pairwise Statistical Tests (Mann-Whitney U)", ""]
     lines.append("| Comparison | Metric | Mean A | Mean B | p-value | Sig | Effect (r) |")
@@ -600,7 +687,7 @@ def generate_markdown_report(df: pd.DataFrame, summary_df: pd.DataFrame, pairwis
     for pair_name, metrics_dict in pairwise.items():
         for metric, result in metrics_dict.items():
             lines.append(
-                f"| {pair_name} | {metric} | {result['mean_a']:.4f} | {result['mean_b']:.4f} | "
+                f"| {pair_name} | {metric} | {fmt_pairwise_metric(metric, result['mean_a'])} | {fmt_pairwise_metric(metric, result['mean_b'])} | "
                 f"{result['p']:.4f} | {result['sig']} | {result['r']:.3f} |"
             )
 

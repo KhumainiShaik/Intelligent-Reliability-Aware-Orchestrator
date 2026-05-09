@@ -1,0 +1,40 @@
+# Baseline: Fixed Rolling Strategy
+# Used for comparison against the RL-adaptive policy.
+# The controller will always select "rolling" regardless of stress or forecast.
+# Represents the Kubernetes-default behaviour: rolling update with no
+# proactive traffic management or pre-scaling.
+apiVersion: rollout.orchestrated.io/v1alpha1
+kind: OrchestratedRollout
+metadata:
+  name: workload-v2-rollout
+  namespace: orchestrated-rollout
+  labels:
+    app: workload
+    experiment.baseline: "rolling"
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: workload-workload
+
+  release:
+    image: skkhumaini1119/orchestrated-rollout-workload
+    tag: v0.1.0
+
+  # Constrain to a single action — forces the policy to pick "rolling" even
+  # if the Q-table prefers another strategy in the current stress state.
+  actionSet:
+    - rolling
+
+  slo:
+    maxP95LatencyMs: 100
+    maxErrorRate: 0.01
+
+  rolloutHints:
+    targetReplicas: 4
+    warmUpClass: medium
+
+  guardrailConfig:
+    maxDelaySeconds: 120
+    maxExtraReplicas: 5
+    maxRolloutTimeSeconds: 600

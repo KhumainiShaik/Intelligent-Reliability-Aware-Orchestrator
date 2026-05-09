@@ -28,7 +28,7 @@
 import http from 'k6/http';
 import { check } from 'k6';
 import { Rate, Trend, Counter } from 'k6/metrics';
-import { INFERENCE_ENDPOINT, THRESHOLDS, getRequestParams, isWarmup } from '../config.js';
+import { INFERENCE_ENDPOINT, SUMMARY_TREND_STATS, THRESHOLDS, getRequestParams, isWarmup } from '../config.js';
 
 const errorRate = new Rate('error_rate');
 const latencyTrend = new Trend('inference_latency', true);
@@ -73,6 +73,7 @@ export const options = {
         },
     },
     thresholds: THRESHOLDS,
+    summaryTrendStats: SUMMARY_TREND_STATS,
 };
 
 export default function () {

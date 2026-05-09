@@ -1,0 +1,6 @@
+apiVersion: v2
+name: portable-workload
+description: Reusable workload chart for Orchestrated Rollout portability validation
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

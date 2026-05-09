@@ -59,14 +59,27 @@ def main() -> None:
 
     # Import reconciler module to register kopf handlers
     # Run kopf
+    import os
+
     import kopf
 
     import controller.reconciler  # noqa: F401
 
-    kopf.run(
-        clusterwide=True,
-        liveness_endpoint="http://0.0.0.0:8081/healthz",
-    )
+    namespace = os.environ.get("CONTROLLER_NAMESPACE")
+    liveness_endpoint = "http://0.0.0.0:8081/healthz"
+    if namespace:
+        logger.info("Running in namespace-scoped mode for namespace: %s", namespace)
+        kopf.run(
+            clusterwide=False,
+            namespaces=[namespace],
+            liveness_endpoint=liveness_endpoint,
+        )
+    else:
+        logger.info("Running in cluster-wide mode")
+        kopf.run(
+            clusterwide=True,
+            liveness_endpoint=liveness_endpoint,
+        )
 
 
 if __name__ == "__main__":

@@ -1,0 +1,48 @@
+replicaCount: 2
+workload:
+  name: tabular-sklearn
+  class: ml
+  kind: ml
+  version: v1.0.0
+image:
+  repository: europe-west2-docker.pkg.dev/level-slate-494713-u5/oroll/tabular-sklearn
+  tag: portability_20260509
+  pullPolicy: IfNotPresent
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8080
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+hpa:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  cpuTarget: 60
+env:
+    - name: WARMUP_SECONDS
+      value: '1'
+slo:
+  p95Ms: 500
+modelProfile:
+  domain: tabular
+  framework: deterministic
+  sizeClass: small
+  coldStartClass: fast
+  sloP95Ms: 500
+serviceMonitor:
+  enabled: false
+orchestratedRollout:
+  enabled: false
+  actionSet:
+    - rl
+    - pre-scale
+  trafficProfile: ramp
+  objective: reliability
+  policyVariant: v12-contextual
+  faultContext: none

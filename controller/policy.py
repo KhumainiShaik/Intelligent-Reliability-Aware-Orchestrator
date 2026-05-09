@@ -27,7 +27,6 @@ ACTION_ROLLING = "rolling"
 
 ALL_ACTIONS = [ACTION_DELAY, ACTION_PRE_SCALE, ACTION_CANARY, ACTION_ROLLING]
 
-
 @dataclass
 class FeatureSpec:
     name: str
@@ -133,9 +132,8 @@ class Engine:
             "mem_util": snap.node_mem_util,
             "hpa_gap": float(snap.hpa_desired_replicas - snap.hpa_current_replicas),
             "stress_score": stress_score,
-            # stress_forecast: supplied by snapshot collector from RPS trend velocity.
-            # High value (≥0.5) signals rapidly rising load — used by v10b policy to
-            # select more conservative strategies (canary/delay) when a spike is incoming.
+            # stress_forecast is optional. Older artifacts may include it as a
+            # feature, while the default no-forecast policy ignores it.
             "stress_forecast": snap.stress_forecast,
         }
 

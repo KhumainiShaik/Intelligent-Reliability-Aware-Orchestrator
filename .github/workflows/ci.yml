@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 jobs:
-  # Python lint
+  # ── Python lint ──────────────────────────────────────────────
   lint:
     runs-on: ubuntu-latest
     steps:
@@ -25,15 +25,40 @@ jobs:
         run: pip install -e ".[dev]"
 
       - name: Ruff check
-        run: ruff check --output-format=github controller/ kisim/ evaluation/
+        run: ruff check --output-format=github controller/ kisim/ evaluation/ tests/
 
       - name: Ruff format check
-        run: ruff format --check controller/ kisim/ evaluation/
+        run: ruff format --check controller/ kisim/ evaluation/ tests/
 
       - name: Mypy
         run: mypy controller/
 
-  # Helm lint
+  # ── Python tests ─────────────────────────────────────────────
+  test:
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Run tests with coverage
+        run: pytest --cov=controller --cov-report=term-missing --cov-report=xml -v tests/
+
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.xml
+
+  # ── Helm lint ────────────────────────────────────────────────
   helm-lint:
     runs-on: ubuntu-latest
     steps:
@@ -62,7 +87,7 @@ jobs:
       - name: Template monitoring chart
         run: helm template test charts/monitoring/ > /dev/null
 
-  # Go build (workload)
+  # ── Go build (workload) ─────────────────────────────────────
   go-build:
     runs-on: ubuntu-latest
     steps:
@@ -79,10 +104,10 @@ jobs:
       - name: Vet
         run: go vet ./workload/
 
-  # Docker build (no push)
+  # ── Docker build (no push) ──────────────────────────────────
   docker-build:
     runs-on: ubuntu-latest
-    needs: [lint, go-build]
+    needs: [test, go-build]
     strategy:
       matrix:
         image:

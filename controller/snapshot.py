@@ -20,7 +20,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-
 @dataclass
 class DecisionSnapshot:
     """All signals collected at deploy time for strategy selection."""
@@ -107,6 +106,14 @@ class Collector:
         snap = DecisionSnapshot()
         errors: list[str] = []
 
+        def _nonfatal(err: str | None) -> bool:
+            """Return True if *err* represents a benign 'no data yet' condition."""
+            if not err:
+                return False
+            # Prometheus returns empty results frequently for brand-new pods/time series
+            # (e.g. rate([2m]) before two minutes of scrapes). Treat this as non-fatal.
+            return err.startswith("no data for query")
+
         # Scope workload-level metrics to the rollout target.
         # We rely on the Prometheus relabeling that sets `kubernetes_pod_name`.
         # This avoids mixing Go + ML workload metrics in the same namespace.
@@ -119,6 +126,16 @@ class Collector:
         rps_queries = [
             (
                 f'sum(rate(workload_requests_total{{kubernetes_namespace="{namespace}",'
+                f'kubernetes_pod_name=~"{target_pod_re}",endpoint="inference"}}[30s]))',
+                "inference_rps_30s",
+            ),
+            (
+                f'sum(rate(workload_requests_total{{kubernetes_namespace="{namespace}",'
+                f'kubernetes_pod_name=~"{target_pod_re}",endpoint="inference"}}[1m]))',
+                "inference_rps_1m",
+            ),
+            (
+                f'sum(rate(workload_requests_total{{kubernetes_namespace="{namespace}",'
                 f'kubernetes_pod_name=~"{target_pod_re}",endpoint="inference"}}[2m]))',
                 "inference_rps_2m",
             ),
@@ -129,8 +146,8 @@ class Collector:
             ),
             (
                 f'sum(rate(workload_requests_total{{kubernetes_namespace="{namespace}",'
-                f'kubernetes_pod_name=~"{target_pod_re}"}}[2m]))',
-                "all_rps_2m",
+                f'kubernetes_pod_name=~"{target_pod_re}"}}[1m]))',
+                "all_rps_1m",
             ),
         ]
         last_rps_err: str | None = None
@@ -138,30 +155,52 @@ class Collector:
             snap.rps, last_rps_err = self._query_scalar(query)
             if not last_rps_err:
                 break
-        if last_rps_err:
+        if last_rps_err and not _nonfatal(last_rps_err):
             errors.append(f"RPS: {last_rps_err}")
 
-        p95, err = self._query_scalar(
-            f"histogram_quantile(0.95, sum(rate(workload_request_duration_seconds_bucket"
-            f'{{kubernetes_namespace="{namespace}",kubernetes_pod_name=~"{target_pod_re}",'
-            f'endpoint="inference"}}[2m])) by (le))'
-        )
-        if err:
-            errors.append(f"p95: {err}")
-        else:
-            snap.p95_latency_ms = p95 * 1000.0
+        p95_windows = ["30s", "1m", "2m", "5m"]
+        last_p95_err: str | None = None
+        for w in p95_windows:
+            p95, last_p95_err = self._query_scalar(
+                f"histogram_quantile(0.95, sum(rate(workload_request_duration_seconds_bucket"
+                f'{{kubernetes_namespace="{namespace}",kubernetes_pod_name=~"{target_pod_re}",'
+                f'endpoint="inference"}}[{w}])) by (le))'
+            )
+            if not last_p95_err:
+                snap.p95_latency_ms = p95 * 1000.0
+                break
+        if last_p95_err and not _nonfatal(last_p95_err):
+            errors.append(f"p95: {last_p95_err}")
 
-        p99, err = self._query_scalar(
-            f"histogram_quantile(0.99, sum(rate(workload_request_duration_seconds_bucket"
-            f'{{kubernetes_namespace="{namespace}",kubernetes_pod_name=~"{target_pod_re}",'
-            f'endpoint="inference"}}[2m])) by (le))'
-        )
-        if err:
-            errors.append(f"p99: {err}")
-        else:
-            snap.p99_latency_ms = p99 * 1000.0
+        p99_windows = ["30s", "1m", "2m", "5m"]
+        last_p99_err: str | None = None
+        for w in p99_windows:
+            p99, last_p99_err = self._query_scalar(
+                f"histogram_quantile(0.99, sum(rate(workload_request_duration_seconds_bucket"
+                f'{{kubernetes_namespace="{namespace}",kubernetes_pod_name=~"{target_pod_re}",'
+                f'endpoint="inference"}}[{w}])) by (le))'
+            )
+            if not last_p99_err:
+                snap.p99_latency_ms = p99 * 1000.0
+                break
+        if last_p99_err and not _nonfatal(last_p99_err):
+            errors.append(f"p99: {last_p99_err}")
 
         error_rate_queries = [
+            (
+                f'sum(rate(workload_requests_total{{kubernetes_namespace="{namespace}",'
+                f'kubernetes_pod_name=~"{target_pod_re}",endpoint="inference",status=~"5.."}}[30s]))'
+                f' / sum(rate(workload_requests_total{{kubernetes_namespace="{namespace}",'
+                f'kubernetes_pod_name=~"{target_pod_re}",endpoint="inference"}}[30s]))',
+                "inference_err_30s",
+            ),
+            (
+                f'sum(rate(workload_requests_total{{kubernetes_namespace="{namespace}",'
+                f'kubernetes_pod_name=~"{target_pod_re}",endpoint="inference",status=~"5.."}}[1m]))'
+                f' / sum(rate(workload_requests_total{{kubernetes_namespace="{namespace}",'
+                f'kubernetes_pod_name=~"{target_pod_re}",endpoint="inference"}}[1m]))',
+                "inference_err_1m",
+            ),
             (
                 f'sum(rate(workload_requests_total{{kubernetes_namespace="{namespace}",'
                 f'kubernetes_pod_name=~"{target_pod_re}",endpoint="inference",status=~"5.."}}[2m]))'
@@ -178,10 +217,10 @@ class Collector:
             ),
             (
                 f'sum(rate(workload_requests_total{{kubernetes_namespace="{namespace}",'
-                f'kubernetes_pod_name=~"{target_pod_re}",status=~"5.."}}[2m]))'
+                f'kubernetes_pod_name=~"{target_pod_re}",status=~"5.."}}[1m]))'
                 f' / sum(rate(workload_requests_total{{kubernetes_namespace="{namespace}",'
-                f'kubernetes_pod_name=~"{target_pod_re}"}}[2m]))',
-                "all_err_2m",
+                f'kubernetes_pod_name=~"{target_pod_re}"}}[1m]))',
+                "all_err_1m",
             ),
         ]
         last_err_rate_err: str | None = None
@@ -190,12 +229,12 @@ class Collector:
             if not last_err_rate_err:
                 snap.error_rate = error_rate
                 break
-        if last_err_rate_err:
+        if last_err_rate_err and not _nonfatal(last_err_rate_err):
             errors.append(f"error_rate: {last_err_rate_err}")
 
         # Cluster pressure
         pending, err = self._query_scalar('sum(kube_pod_status_phase{phase="Pending"})')
-        if err:
+        if err and not _nonfatal(err):
             errors.append(f"pending_pods: {err}")
         else:
             snap.pending_pods = int(pending)
@@ -203,13 +242,13 @@ class Collector:
         restarts, err = self._query_scalar(
             f'sum(kube_pod_container_status_restarts_total{{namespace="{namespace}"}})'
         )
-        if err:
+        if err and not _nonfatal(err):
             errors.append(f"restarts: {err}")
         else:
             snap.restart_count = int(restarts)
 
         cpu, err = self._query_scalar('avg(1 - rate(node_cpu_seconds_total{mode="idle"}[2m]))')
-        if err:
+        if err and not _nonfatal(err):
             errors.append(f"cpu: {err}")
         else:
             snap.node_cpu_util = cpu
@@ -217,18 +256,19 @@ class Collector:
         mem, err = self._query_scalar(
             "avg(1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes))"
         )
-        if err:
+        if err and not _nonfatal(err):
             errors.append(f"mem: {err}")
         else:
             snap.node_mem_util = mem
 
         # HPA context
+        # HPA name is derived from the target Deployment name in our Helm chart.
         hpa_name = f"{target_name}-hpa"
         desired, err = self._query_scalar(
             f"kube_horizontalpodautoscaler_status_desired_replicas"
             f'{{namespace="{namespace}",horizontalpodautoscaler="{hpa_name}"}}'
         )
-        if err:
+        if err and not _nonfatal(err):
             errors.append(f"hpa_desired: {err}")
         else:
             snap.hpa_desired_replicas = int(desired)
@@ -237,7 +277,7 @@ class Collector:
             f"kube_horizontalpodautoscaler_status_current_replicas"
             f'{{namespace="{namespace}",horizontalpodautoscaler="{hpa_name}"}}'
         )
-        if err:
+        if err and not _nonfatal(err):
             errors.append(f"hpa_current: {err}")
         else:
             snap.hpa_current_replicas = int(current)
@@ -250,12 +290,10 @@ class Collector:
         if not err and snap.rps > 0:
             snap.rps_trend = (snap.rps - rps_5m) / max(snap.rps, 1.0)
 
-        # Stress forecast derived from RPS velocity.
+        # Optional stress forecast derived from RPS velocity.
         # A strong positive rps_trend (short-window RPS >> 5-min average) indicates
-        # that load is rising rapidly — a spike is imminent or in progress.
-        # This signal activates the forecast-conditioned branches of the v10b policy,
-        # which choose canary/delay instead of pre-scale when a spike is incoming.
-        # Threshold 0.3: meaningful rise (30%+ above recent baseline) triggers forecast.
+        # that load is rising rapidly. Policies may use this, but forecasting is not
+        # required for the default deployable policy.
         if snap.rps_trend >= 0.3:
             snap.stress_forecast = min(snap.rps_trend, 1.0)
         elif snap.rps_trend > 0.0:
@@ -269,7 +307,8 @@ class Collector:
             snap.stress_forecast,
         )
 
-        # Mark degraded if too many individual queries failed
+        # Mark degraded only when we see multiple *real* query failures.
+        # (Empty results/no-data is common in the first minutes of a new rollout.)
         if len(errors) > 3:
             snap.degraded = True
             logger.warning("snapshot degraded — %d query failures: %s", len(errors), errors)

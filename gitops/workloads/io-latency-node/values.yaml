@@ -1,0 +1,50 @@
+replicaCount: 2
+workload:
+  name: io-latency-node
+  class: http
+  kind: http
+  version: v1.0.0
+image:
+  repository: europe-west2-docker.pkg.dev/level-slate-494713-u5/oroll/io-latency-node
+  tag: portability_20260509
+  pullPolicy: IfNotPresent
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8080
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+hpa:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  cpuTarget: 60
+env:
+    - name: SLEEP_MS
+      value: '80'
+    - name: WARMUP_SECONDS
+      value: '2'
+slo:
+  p95Ms: 500
+modelProfile:
+  domain: none
+  framework: none
+  sizeClass: small
+  coldStartClass: fast
+  sloP95Ms: 500
+serviceMonitor:
+  enabled: false
+orchestratedRollout:
+  enabled: false
+  actionSet:
+    - rl
+    - pre-scale
+  trafficProfile: ramp
+  objective: reliability
+  policyVariant: v12-contextual
+  faultContext: none

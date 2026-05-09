@@ -11,7 +11,7 @@ metadata:
 spec:
   appinfo:
     appns: orchestrated-rollout
-    applabel: "app=workload"
+    applabel: "app.kubernetes.io/name=workload,app.kubernetes.io/instance=workload"
     appkind: deployment
   engineState: active
   chaosServiceAccount: litmus-admin

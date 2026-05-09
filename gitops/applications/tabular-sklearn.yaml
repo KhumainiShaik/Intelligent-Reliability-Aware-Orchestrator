@@ -1,0 +1,27 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: workload-tabular-sklearn
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: orchestrated-rollout-portability
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/AbdulKhumainiShaik/orchestrator-testing.git
+    targetRevision: main
+    path: charts/portable-workload
+    helm:
+      releaseName: tabular-sklearn
+      valueFiles:
+        - values.yaml
+        - ../../gitops/workloads/tabular-sklearn/values.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: workload-tabular
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

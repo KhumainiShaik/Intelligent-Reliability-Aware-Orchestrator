@@ -12,26 +12,26 @@ from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
-
 @dataclass(frozen=True)
 class ControllerConfig:
     """Immutable controller-wide configuration loaded from environment."""
 
-    # Prometheus
+    #Prometheus
     prometheus_url: str = "http://prometheus.monitoring.svc.cluster.local:9090"
     prometheus_timeout: float = 10.0
 
-    # Policy engine
+    #Policy engine
     policy_path: str = "/policy/artifact"
+    policy_mode: str = "rl"  # rl | rule-based
 
-    # Episode logger
+    #Episode logger
     episode_log_path: str = "/episodes"
 
-    # Logging
+    #Logging
     log_level: str = "INFO"
     log_format: str = "json"
 
-    # StressScore weights (must sum to ~1.0)
+    #StressScore weights (must sum to ~1.0)
     stress_weight_latency: float = 0.25
     stress_weight_error: float = 0.25
     stress_weight_pending: float = 0.15
@@ -39,25 +39,25 @@ class ControllerConfig:
     stress_weight_mem: float = 0.10
     stress_weight_hpa_gap: float = 0.10
 
-    # StressScore EWMA parameters
+    #StressScore EWMA parameters
     stress_ewma_alpha: float = 0.3
 
-    # StressScore normalisation
+    #StressScore normalisation
     latency_ceiling_ms: float = 500.0
     error_rate_ceiling: float = 0.05
     pending_pods_ceiling: float = 10.0
 
-    # Guardrails defaults
+    #Guardrails defaults
     max_delay_seconds: int = 120
     max_extra_replicas: int = 5
     max_rollout_time_seconds: int = 600
 
-    # Canary steps (materialiser)
+    #Canary steps (materialiser)
     canary_steps_weights: tuple[int, ...] = (10, 25, 50, 100)
     canary_pause_duration: str = "30s"
     default_delay_seconds: int = 120
 
-    # Retry parameters
+    #Retry parameters
     retry_max_attempts: int = 3
     retry_backoff_factor: float = 0.5
 
@@ -97,6 +97,7 @@ def load_config() -> ControllerConfig:
         prometheus_url=_env("PROMETHEUS_URL", ControllerConfig.prometheus_url),
         prometheus_timeout=_env_float("PROMETHEUS_TIMEOUT", ControllerConfig.prometheus_timeout),
         policy_path=_env("POLICY_PATH", ControllerConfig.policy_path),
+        policy_mode=_env("POLICY_MODE", ControllerConfig.policy_mode).lower(),
         episode_log_path=_env("EPISODE_LOG_PATH", ControllerConfig.episode_log_path),
         log_level=_env("LOG_LEVEL", ControllerConfig.log_level).upper(),
         log_format=_env("LOG_FORMAT", ControllerConfig.log_format),

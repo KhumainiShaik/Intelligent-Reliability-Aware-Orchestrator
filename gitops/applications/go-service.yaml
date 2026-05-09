@@ -1,0 +1,27 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: workload-go-service
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: orchestrated-rollout-portability
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/AbdulKhumainiShaik/orchestrator-testing.git
+    targetRevision: main
+    path: charts/portable-workload
+    helm:
+      releaseName: go-service
+      valueFiles:
+        - values.yaml
+        - ../../gitops/workloads/go-service/values.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: workload-go
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

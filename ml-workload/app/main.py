@@ -6,7 +6,7 @@ Exposes Prometheus metrics compatible with the OrchestratedRollout controller
 (same metric names as the Go workload so the controller works without changes).
 
 Environment variables
-
+---------------------
 MODEL_PATH         Path to the ONNX model file       (default: /app/model/mobilenetv2.onnx)
 PORT               HTTP listen port                   (default: 8080)
 VERSION            Application version string         (default: v1.0.0)
@@ -40,13 +40,17 @@ logging.basicConfig(
 )
 logger = logging.getLogger("ml-workload")
 
+# ---------------------------------------------------------------------------
 # Configuration
+# ---------------------------------------------------------------------------
 MODEL_PATH = os.getenv("MODEL_PATH", "/app/model/mobilenetv2.onnx")
 PORT = int(os.getenv("PORT", "8080"))
 VERSION = os.getenv("VERSION", "v1.0.0")
 WARMUP_DELAY_SECS = float(os.getenv("WARMUP_DELAY_SECS", "8"))
 
+# ---------------------------------------------------------------------------
 # Prometheus metrics — same names as the Go workload for controller compat
+# ---------------------------------------------------------------------------
 requests_total = Counter(
     "workload_requests_total",
     "Total number of requests by endpoint and status.",
@@ -68,7 +72,9 @@ model_load_duration = Gauge(
 )
 app_info = Info("workload", "Application version info")
 
+# ---------------------------------------------------------------------------
 # Model state
+# ---------------------------------------------------------------------------
 _session: ort.InferenceSession | None = None
 _input_name: str = ""
 _ready = threading.Event()
@@ -106,7 +112,9 @@ def _load_model() -> None:
     logger.info("Service READY for inference requests")
 
 
+# ---------------------------------------------------------------------------
 # FastAPI application
+# ---------------------------------------------------------------------------
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     app_info.info({"version": VERSION})
@@ -122,7 +130,7 @@ app = FastAPI(
 )
 
 
-# Health and readiness
+# ---- health / readiness ---------------------------------------------------
 @app.get("/healthz")
 async def healthz():
     requests_total.labels(endpoint="healthz", status="200").inc()
@@ -138,7 +146,7 @@ async def readyz():
     return PlainTextResponse("not ready (loading model)\n", status_code=503)
 
 
-# Inference
+# ---- inference -------------------------------------------------------------
 @app.api_route("/inference", methods=["GET", "POST"])
 async def inference(request: Request):
     """
@@ -193,7 +201,7 @@ async def inference(request: Request):
         in_flight_requests.dec()
 
 
-# Prometheus metrics
+# ---- Prometheus metrics ----------------------------------------------------
 @app.get("/metrics")
 async def metrics():
     return Response(
@@ -202,7 +210,7 @@ async def metrics():
     )
 
 
-# Root info
+# ---- root info -------------------------------------------------------------
 @app.get("/")
 async def root():
     requests_total.labels(endpoint="root", status="200").inc()

@@ -28,13 +28,14 @@ logger = logging.getLogger(__name__)
 
 # Feature specification for discretisation
 # Reduced bins for better Q-table coverage.
-# Compact state: stress_score captures current health; cpu_util captures
-# resource headroom; stress_forecast captures short-horizon load acceleration.
-# Total state space: 5x2x2 = 20 states × 4 actions = 80 state-action pairs (max).
+# Compact default state: stress_score captures current health and cpu_util
+# captures resource headroom. Forecasting is intentionally optional; the live
+# controller may still collect stress_forecast, but a forecasting service is
+# not required for the default deployable policy.
+# Total default state space: 5x2 = 10 states × 4 actions = 40 state-action pairs.
 FEATURE_SPEC = [
     {"name": "stress_score", "min_val": 0.0, "max_val": 1.0, "num_bins": 5},
     {"name": "cpu_util", "min_val": 0.0, "max_val": 1.0, "num_bins": 2},
-    {"name": "stress_forecast", "min_val": 0.0, "max_val": 0.5, "num_bins": 2},
 ]
 
 ACTIONS = [a.value for a in RolloutAction]

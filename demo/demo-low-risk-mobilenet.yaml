@@ -1,0 +1,20 @@
+apiVersion: rollout.orchestrated.io/v1alpha1
+kind: OrchestratedRollout
+metadata:
+  name: demo-low-risk-mobilenet
+  namespace: workload-mobilenet
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: mobilenetv2-onnx
+  release:
+    image: europe-west2-docker.pkg.dev/level-slate-494713-u5/oroll/orchestrated-rollout-ml-workload
+    tag: portability_20260509
+  actionSet:
+    - rl
+  rolloutHints:
+    trafficProfile: ramp
+    objective: reliability
+    policyVariant: v12-contextual
+    faultContext: none

@@ -3,12 +3,14 @@ replicaCount: 1
 
 image:
   repository: orchestrated-rollout-controller
-  tag: "0.1.0"
+  tag: "latest"
   pullPolicy: IfNotPresent
 
 controller:
+  namespaceScoped: false
   prometheusUrl: "http://prometheus.monitoring.svc.cluster.local:9090"
   policyPath: "/policy/artifact"
+  policyMode: "rl"  # rl | rule-based
   episodeLogPath: "/episodes"
   logLevel: "INFO"
   logFormat: "json"

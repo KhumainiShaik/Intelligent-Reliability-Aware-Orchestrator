@@ -1,0 +1,46 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "portable-workload.fullname" . }}
+  labels:
+    {{- include "portable-workload.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  selector:
+    {{- include "portable-workload.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.service.port }}
+      targetPort: {{ .Values.service.targetPort }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "portable-workload.fullname" . }}-stable
+  labels:
+    {{- include "portable-workload.labels" . | nindent 4 }}
+    role: stable
+spec:
+  type: {{ .Values.service.type }}
+  selector:
+    {{- include "portable-workload.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.service.port }}
+      targetPort: {{ .Values.service.targetPort }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "portable-workload.fullname" . }}-canary
+  labels:
+    {{- include "portable-workload.labels" . | nindent 4 }}
+    role: canary
+spec:
+  type: {{ .Values.service.type }}
+  selector:
+    {{- include "portable-workload.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.service.port }}
+      targetPort: {{ .Values.service.targetPort }}

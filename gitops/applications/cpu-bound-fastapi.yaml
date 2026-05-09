@@ -1,0 +1,27 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: workload-cpu-bound-fastapi
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: orchestrated-rollout-portability
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/AbdulKhumainiShaik/orchestrator-testing.git
+    targetRevision: main
+    path: charts/portable-workload
+    helm:
+      releaseName: cpu-bound-fastapi
+      valueFiles:
+        - values.yaml
+        - ../../gitops/workloads/cpu-bound-fastapi/values.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: workload-cpu
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

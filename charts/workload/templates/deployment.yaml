@@ -37,6 +37,7 @@ spec:
             - "--warmup-delay={{ .Values.workload.warmupDelay }}"
             - "--cpu-work-ms={{ .Values.workload.cpuWorkMs }}"
             - "--version={{ .Values.workload.version }}"
+            - "--bg-gradient={{ .Values.workload.bgGradient }}"
           ports:
             - containerPort: {{ .Values.workload.port }}
               name: http

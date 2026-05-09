@@ -1,0 +1,108 @@
+{
+  "with_forecast": {
+    "rl_v10b": {
+      "mean_cost": 10.88855215266732,
+      "std_cost": 14.643426719194306,
+      "ci_95_lower": 10.153867449676296,
+      "ci_95_upper": 11.652686616729719,
+      "mean_slo_violations": 6.325,
+      "success_rate": 0.9298611111111111,
+      "total_trials": 1440
+    },
+    "rl_v8nf_fc": {
+      "mean_cost": 11.058193338148687,
+      "std_cost": 14.865051361376032,
+      "ci_95_lower": 10.290082705841566,
+      "ci_95_upper": 11.84228149920421,
+      "mean_slo_violations": 6.157638888888889,
+      "success_rate": 0.9284722222222223,
+      "total_trials": 1440
+    },
+    "rb_fc": {
+      "mean_cost": 12.315157182273634,
+      "std_cost": 16.59415549627057,
+      "ci_95_lower": 11.467809923384404,
+      "ci_95_upper": 13.165143586101566,
+      "mean_slo_violations": 7.471527777777778,
+      "success_rate": 0.9006944444444445,
+      "total_trials": 1440
+    },
+    "rb_nofc": {
+      "mean_cost": 14.069605179515843,
+      "std_cost": 20.03806362432662,
+      "ci_95_lower": 13.054731485215328,
+      "ci_95_upper": 15.121148966978028,
+      "mean_slo_violations": 8.29861111111111,
+      "success_rate": 0.8791666666666667,
+      "total_trials": 1440
+    },
+    "fixed": {
+      "delay": {
+        "mean_cost": 16.927052158068133,
+        "std_cost": 20.151595584801125,
+        "ci_95_lower": 15.899151458052875,
+        "ci_95_upper": 17.995863361370024,
+        "mean_slo_violations": 11.549305555555556,
+        "success_rate": 0.8159722222222222,
+        "total_trials": 1440
+      },
+      "pre-scale": {
+        "mean_cost": 10.69462816226719,
+        "std_cost": 13.828214351441792,
+        "ci_95_lower": 10.008972738732067,
+        "ci_95_upper": 11.409935778334582,
+        "mean_slo_violations": 5.96875,
+        "success_rate": 0.9340277777777778,
+        "total_trials": 1440
+      },
+      "canary": {
+        "mean_cost": 14.682338825270127,
+        "std_cost": 21.44552897189655,
+        "ci_95_lower": 13.589353251669417,
+        "ci_95_upper": 15.817286889649496,
+        "mean_slo_violations": 8.085416666666667,
+        "success_rate": 0.8881944444444444,
+        "total_trials": 1440
+      },
+      "rolling": {
+        "mean_cost": 21.72767525790919,
+        "std_cost": 28.948351824749988,
+        "ci_95_lower": 20.21468366793151,
+        "ci_95_upper": 23.24558652417635,
+        "mean_slo_violations": 13.21875,
+        "success_rate": 0.7756944444444445,
+        "total_trials": 1440
+      }
+    }
+  },
+  "without_forecast": {
+    "rl_v10b_nofc": {
+      "mean_cost": 12.220537847760857,
+      "std_cost": 15.819054117248463,
+      "ci_95_lower": 11.426836765292217,
+      "ci_95_upper": 13.0550814779714,
+      "mean_slo_violations": 7.4631944444444445,
+      "success_rate": 0.9,
+      "total_trials": 1440
+    },
+    "rl_v8nf": {
+      "mean_cost": 10.53396588482242,
+      "std_cost": 13.323007886087634,
+      "ci_95_lower": 9.855929776610273,
+      "ci_95_upper": 11.233304127892643,
+      "mean_slo_violations": 5.905555555555556,
+      "success_rate": 0.9361111111111111,
+      "total_trials": 1440
+    },
+    "rb": {
+      "mean_cost": 14.234864055606492,
+      "std_cost": 20.47218861933591,
+      "ci_95_lower": 13.205942496622345,
+      "ci_95_upper": 15.30332785848492,
+      "mean_slo_violations": 8.345138888888888,
+      "success_rate": 0.8791666666666667,
+      "total_trials": 1440
+    }
+  },
+  "oracle_mean": 9.902016884860503
+}

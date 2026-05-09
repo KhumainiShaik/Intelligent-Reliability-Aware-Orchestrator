@@ -1,0 +1,20 @@
+apiVersion: rollout.orchestrated.io/v1alpha1
+kind: OrchestratedRollout
+metadata:
+  name: demo-stress-cpu
+  namespace: workload-cpu
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: cpu-bound-fastapi
+  release:
+    image: europe-west2-docker.pkg.dev/level-slate-494713-u5/oroll/cpu-bound-fastapi
+    tag: portability_20260509
+  actionSet:
+    - rl
+  rolloutHints:
+    trafficProfile: spike
+    objective: reliability
+    policyVariant: v12-contextual
+    faultContext: pod-kill

@@ -1,7 +1,7 @@
 """
 Guardrails — safety constraints applied after policy inference.
 
-Six deterministic rules ensure the chosen action stays within safe
+Seven deterministic rules ensure the chosen action stays within safe
 operating bounds regardless of what the RL policy recommends.
 """
 
@@ -29,7 +29,6 @@ DEFAULT_MAX_ROLLOUT_TIME_SECONDS = 600
 
 # Helper: extract guardrail config values from CR spec
 
-
 def _cfg_int(config: dict | None, key: str, default: int) -> int:
     """Safely extract an integer from the guardrailConfig dict."""
     if config and key in config:
@@ -54,7 +53,7 @@ def get_max_rollout_time(config: dict | None) -> int:
 
 
 class Guardrails:
-    """Apply six safety rules to override policy-chosen actions when needed."""
+    """Apply safety rules to override policy-chosen actions when needed."""
 
     def apply(
         self,
@@ -74,26 +73,47 @@ class Guardrails:
                 return ACTION_CANARY, True, "degraded snapshot — forcing conservative canary"
             return action, False, ""
 
-        # Rule 2: severe node pressure → force delay
+        # Rule 2: healthy low-stress state → do not pay delay cost.
+        #
+        # A forecast is optional in this project. When the live snapshot is
+        # healthy and no concrete pressure signal is present, delaying the
+        # deployment is unjustified and was the main failure mode in the
+        # 2026-05-01 matrix. Pre-scale gives extra headroom without requiring
+        # a forecasting service.
+        if (
+            action == ACTION_DELAY
+            and stress_score < 0.25
+            and snap.error_rate <= 0.01
+            and snap.pending_pods <= 5
+            and snap.node_cpu_util < 0.75
+            and snap.node_mem_util < 0.75
+        ):
+            return (
+                ACTION_PRE_SCALE,
+                True,
+                "healthy low-stress snapshot — avoiding unnecessary delay; using pre-scale",
+            )
+
+        # Rule 3: severe node pressure → force delay
         if (snap.node_cpu_util > 0.9 or snap.node_mem_util > 0.9) and action in (
             ACTION_ROLLING,
             ACTION_PRE_SCALE,
         ):
             return ACTION_DELAY, True, "severe node pressure — forcing delay"
 
-        # Rule 3: high pending pods → avoid rolling
+        # Rule 4: high pending pods → avoid rolling
         if snap.pending_pods > 5 and action == ACTION_ROLLING:
             return ACTION_DELAY, True, "high pending pods — forcing delay instead of rolling"
 
-        # Rule 4: elevated error rate → prefer canary over rolling
+        # Rule 5: elevated error rate → prefer canary over rolling
         if snap.error_rate > 0.05 and action == ACTION_ROLLING:
             return ACTION_CANARY, True, "elevated error rate — forcing canary instead of rolling"
 
-        # Rule 5: extreme stress score → conservative override
+        # Rule 6: extreme stress score → conservative override
         if stress_score > 0.9 and action not in (ACTION_DELAY, ACTION_CANARY):
             return ACTION_DELAY, True, "extreme stress score (>0.9) — forcing delay"
 
-        # Rule 6: pre-scale — materialiser enforces actual limit, guardrails allow it
+        # Rule 7: pre-scale — materialiser enforces actual limit, guardrails allow it
         if action == ACTION_PRE_SCALE:
             _max_extra = get_max_extra_replicas(config)
             # (informational only; materialiser caps replicas)

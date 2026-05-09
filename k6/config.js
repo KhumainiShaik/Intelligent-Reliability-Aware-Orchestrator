@@ -26,6 +26,8 @@ export const THRESHOLDS = {
     'http_reqs': ['rate>0'],
 };
 
+export const SUMMARY_TREND_STATS = ['avg', 'min', 'med', 'max', 'p(90)', 'p(95)', 'p(99)'];
+
 // Common tags for Prometheus integration
 export function getRequestParams(scenario) {
     const params = {
@@ -40,6 +42,15 @@ export function getRequestParams(scenario) {
         params.headers = { Host: __ENV.HOST_HEADER };
     }
     return params;
+}
+
+export function hasPredictionPayload(response) {
+    try {
+        const body = JSON.parse(response.body);
+        return body.prediction !== undefined || body.predictions !== undefined;
+    } catch (e) {
+        return false;
+    }
 }
 
 // Helper to determine if we are in warmup stage

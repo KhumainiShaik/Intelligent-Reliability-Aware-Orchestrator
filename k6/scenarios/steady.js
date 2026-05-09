@@ -8,7 +8,7 @@
 import http from 'k6/http';
 import { check, sleep } from 'k6';
 import { Rate, Trend } from 'k6/metrics';
-import { INFERENCE_ENDPOINT, THRESHOLDS, getRequestParams, isWarmup } from '../config.js';
+import { INFERENCE_ENDPOINT, SUMMARY_TREND_STATS, THRESHOLDS, getRequestParams, hasPredictionPayload, isWarmup } from '../config.js';
 
 const errorRate = new Rate('error_rate');
 const latencyTrend = new Trend('inference_latency', true);
@@ -28,6 +28,7 @@ export const options = {
         },
     },
     thresholds: THRESHOLDS,
+    summaryTrendStats: SUMMARY_TREND_STATS,
 };
 
 export default function () {
@@ -36,14 +37,7 @@ export default function () {
 
     check(res, {
         'status is 200': (r) => r.status === 200,
-        'response has prediction': (r) => {
-            try {
-                const body = JSON.parse(r.body);
-                return body.prediction !== undefined;
-            } catch (e) {
-                return false;
-            }
-        },
+        'response has prediction': hasPredictionPayload,
     });
 
     if (!isWarmup()) {

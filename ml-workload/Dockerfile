@@ -1,3 +1,4 @@
+# =============================================================================
 # ML Inference Workload — OrchestratedRollout
 #
 # Real MobileNetV2 (ONNX Runtime) served via FastAPI with Prometheus metrics
@@ -8,6 +9,7 @@
 #
 # Build (from repo root):
 #   docker build -f ml-workload/Dockerfile -t orchestrated-rollout-ml-workload:v1.0.0 .
+# =============================================================================
 
 FROM python:3.11-slim AS runtime
 

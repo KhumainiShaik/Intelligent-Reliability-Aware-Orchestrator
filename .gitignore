@@ -6,6 +6,10 @@ bin/
 .DS_Store
 Thumbs.db
 
+# Environment / secrets
+.env
+.env.*
+
 # Go
 *.test
 coverage.out
@@ -33,15 +37,13 @@ coverage.xml
 # Docker
 *.tar
 
-# Local-only folders (not committed)
-scripts/
-artifacts/
-results/
-archive/
-
-# Experiment artifacts (large)
+# Experiment artifacts (large / ephemeral)
 experiments/grid_*/
-experiments/exp_*/
+experiments/comparison_*/
+experiments/steady_comparison_*/
+experiments/smoke_*/
+experiments/smoke[0-9]_*/
+experiments/episodes/
 experiments/*/k6_results/
 experiments/*/reports/
 experiments/*/plots/
@@ -61,6 +63,9 @@ aks85/
 # Staging area
 remote-repo/
 
+# Archive (legacy local scripts, old policy iterations)
+archive/
+
 # Temp validation scripts
 _test_pipeline.py
 _validate_pipeline.py
@@ -70,6 +75,19 @@ _*.py
 # ONNX models (large binary files)
 *.onnx
 *.onnx.data
+
+# Experiment shard logs
+experiments/*.log
+
+# Generated results (downloaded from GCS / regenerated)
+results/
+
+# Backup files
+*.bak
+
+# One-off scripts/logs
+upgrade.sh
+upgrade.log
 
 # Large k6 streaming JSON logs (use k6_summary.json instead)
 # experiments/*/k6.json files are 50-250MB each

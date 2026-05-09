@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{ title }}</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <main class="shell">
+    <section class="hero">
+      <p class="eyebrow">Live Explainability Layer</p>
+      <h1>Adaptive Deployment Orchestration Demo</h1>
+      <p class="lede">The dashboard reads the latest OrchestratedRollout decision and shows why the controller selected rolling, canary, pre-scale, or delay for the current workload context.</p>
+      <div id="status-pill" class="pill">Polling Kubernetes...</div>
+    </section>
+
+    <section class="grid">
+      <article class="card wide">
+        <h2>Deployment</h2>
+        <dl>
+          <div><dt>Workload</dt><dd id="workload">-</dd></div>
+          <div><dt>Namespace</dt><dd id="namespace">-</dd></div>
+          <div><dt>Release</dt><dd id="release">-</dd></div>
+          <div><dt>Current image</dt><dd id="image">-</dd></div>
+        </dl>
+      </article>
+
+      <article class="card decision">
+        <h2>Policy Decision</h2>
+        <div id="strategy" class="strategy">-</div>
+        <p id="headroom" class="subtle">Headroom: -</p>
+        <p id="policy" class="subtle">Policy: -</p>
+      </article>
+
+      <article class="card">
+        <h2>Cluster State</h2>
+        <dl>
+          <div><dt>Traffic</dt><dd id="traffic">-</dd></div>
+          <div><dt>Fault</dt><dd id="fault">-</dd></div>
+          <div><dt>Stress</dt><dd id="stress">-</dd></div>
+          <div><dt>HPA</dt><dd id="hpa">-</dd></div>
+        </dl>
+      </article>
+
+      <article class="card">
+        <h2>Rollout Status</h2>
+        <dl>
+          <div><dt>Object</dt><dd id="oroll">-</dd></div>
+          <div><dt>Phase</dt><dd id="phase">-</dd></div>
+          <div><dt>Ready replicas</dt><dd id="replicas">-</dd></div>
+          <div><dt>Message</dt><dd id="message">-</dd></div>
+        </dl>
+      </article>
+
+      <article class="card">
+        <h2>Live Metrics</h2>
+        <dl>
+          <div><dt>P95 latency</dt><dd id="p95">-</dd></div>
+          <div><dt>Throughput</dt><dd id="throughput">-</dd></div>
+          <div><dt>Failures</dt><dd id="failures">-</dd></div>
+        </dl>
+      </article>
+
+      <article class="card">
+        <h2>GitOps Status</h2>
+        <dl>
+          <div><dt>Application</dt><dd id="argo-app">-</dd></div>
+          <div><dt>Sync</dt><dd id="argo-sync">-</dd></div>
+          <div><dt>Health</dt><dd id="argo-health">-</dd></div>
+          <div><dt>Revision</dt><dd id="argo-revision">-</dd></div>
+        </dl>
+      </article>
+
+      <article class="card wide explanation">
+        <h2>Decision Explanation</h2>
+        <p id="explanation">Waiting for rollout data...</p>
+      </article>
+    </section>
+  </main>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const text = (id, value) => { $(id).textContent = value ?? '-'; };
+    const ms = (seconds) => seconds == null ? '-' : `${Math.round(seconds * 1000)} ms`;
+    const rps = (value) => value == null ? '-' : `${Number(value).toFixed(1)} req/s`;
+
+    async function refresh() {
+      try {
+        const response = await fetch('/api/latest-rollout', { cache: 'no-store' });
+        const data = await response.json();
+        const rollout = data.rollout || {};
+        const dep = data.deployment || {};
+        const hpa = data.hpa || {};
+        const metrics = data.metrics || {};
+        const argo = data.argo || {};
+
+        $('status-pill').textContent = rollout.available ? `Updated ${new Date(data.generatedAt).toLocaleTimeString()}` : rollout.message;
+        $('status-pill').className = rollout.available ? 'pill ok' : 'pill warn';
+
+        text('workload', rollout.targetName);
+        text('namespace', rollout.namespace);
+        text('release', `${rollout.releaseImage || '-'}:${rollout.releaseTag || '-'}`);
+        text('image', dep.image);
+        text('strategy', rollout.strategy);
+        text('headroom', rollout.headroom == null ? 'Headroom: not used' : `Headroom: +${rollout.headroom} replicas`);
+        text('policy', `Policy: ${rollout.policyVariant || rollout.policyVersion || '-'}`);
+        text('traffic', rollout.trafficProfile);
+        text('fault', rollout.faultContext);
+        text('stress', rollout.stressScore == null ? '-' : Number(rollout.stressScore).toFixed(3));
+        text('hpa', hpa.available ? `${hpa.currentReplicas}/${hpa.desiredReplicas} current/desired, min ${hpa.minReplicas}, max ${hpa.maxReplicas}` : '-');
+        text('oroll', rollout.name);
+        text('phase', rollout.phase);
+        text('replicas', dep.available ? `${dep.readyReplicas}/${dep.replicas}` : '-');
+        text('message', rollout.message);
+        text('p95', ms(metrics.p95LatencySeconds));
+        text('throughput', rps(metrics.throughputRps));
+        text('failures', rps(metrics.failuresRps));
+        text('argo-app', argo.name);
+        text('argo-sync', argo.sync);
+        text('argo-health', argo.health);
+        text('argo-revision', argo.revision && argo.revision !== 'unknown' ? argo.revision.slice(0, 12) : argo.revision);
+        text('explanation', rollout.explanation);
+      } catch (err) {
+        $('status-pill').textContent = `Dashboard error: ${err}`;
+        $('status-pill').className = 'pill warn';
+      }
+    }
+
+    refresh();
+    setInterval(refresh, 5000);
+  </script>
+</body>
+</html>

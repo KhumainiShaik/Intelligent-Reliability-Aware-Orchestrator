@@ -3,7 +3,7 @@ replicaCount: 2
 
 image:
   repository: orchestrated-rollout-workload
-  tag: "0.1.0"
+  tag: "latest"
   pullPolicy: IfNotPresent
 
 service:
@@ -15,11 +15,13 @@ workload:
   port: 8080
   warmupDelay: "5s"
   # cpuWorkMs: real CPU-burning loop per request (see workload/main.go simulateCPUWork).
-  # 30ms per request with 250m limit = ~4× over-provision at 50 RPS/pod, forcing
-  # real CPU throttling, p95 latency spikes and HPA activity — required to drive
-  # stress_score into bins 3–4 (0.5–0.75+) during spike experiments.
-  cpuWorkMs: 30
+  # GKE tuning: 5ms × 100 RPS / 2 pods = 250ms CPU/s per pod vs 250m limit →
+  # exactly at capacity under steady load. HPA scales to 3-4 pods quickly,
+  # settling p95 ~20-50ms. During rollout disruption stress_score rises to 0.3-0.6,
+  # giving the RL policy meaningful signal to differentiate strategies.
+  cpuWorkMs: 5
   version: "v1.0.0"
+  bgGradient: "#667eea, #764ba2"
 
 ingress:
   enabled: true
@@ -46,8 +48,5 @@ resources:
     cpu: 100m
     memory: 64Mi
   limits:
-    # Reduced from 500m to 250m to simulate production-scale CPU constraint on kind.
-    # At 100 RPS × 30ms CPU work = 3000ms/s needed vs 500ms/s (2 pods × 250m) =
-    # 6× over-provision → real throttling → p95 spikes to 150–300ms under spike load.
     cpu: 250m
     memory: 256Mi

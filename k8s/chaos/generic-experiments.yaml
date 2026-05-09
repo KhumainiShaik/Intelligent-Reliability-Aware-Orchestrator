@@ -1,0 +1,67 @@
+apiVersion: litmuschaos.io/v1alpha1
+kind: ChaosExperiment
+metadata:
+  name: pod-delete
+  labels:
+    app.kubernetes.io/component: chaos-experiment
+    app.kubernetes.io/part-of: litmus
+spec:
+  definition:
+    labels:
+      name: pod-delete
+      app.kubernetes.io/part-of: litmus
+    scope: Namespaced
+    permissions:
+      - apiGroups: [""]
+        resources: ["pods", "pods/log", "pods/exec", "events"]
+        verbs: ["create", "delete", "get", "list", "patch", "update", "deletecollection"]
+      - apiGroups: ["apps"]
+        resources: ["deployments", "replicasets", "statefulsets", "daemonsets"]
+        verbs: ["get", "list", "patch", "update"]
+      - apiGroups: ["batch"]
+        resources: ["jobs"]
+        verbs: ["create", "delete", "deletecollection", "get", "list", "patch", "update"]
+      - apiGroups: ["litmuschaos.io"]
+        resources: ["chaosengines", "chaosexperiments", "chaosresults"]
+        verbs: ["create", "delete", "get", "list", "patch", "update"]
+    image: "litmuschaos.docker.scarf.sh/litmuschaos/go-runner:3.28.0"
+    imagePullPolicy: Always
+    args: ["-c", "./experiments -name pod-delete"]
+    command: ["/bin/bash"]
+    env:
+      - name: TOTAL_CHAOS_DURATION
+        value: "15"
+---
+apiVersion: litmuschaos.io/v1alpha1
+kind: ChaosExperiment
+metadata:
+  name: pod-network-latency
+  labels:
+    app.kubernetes.io/component: chaos-experiment
+    app.kubernetes.io/part-of: litmus
+spec:
+  definition:
+    labels:
+      name: pod-network-latency
+      app.kubernetes.io/part-of: litmus
+    scope: Namespaced
+    permissions:
+      - apiGroups: [""]
+        resources: ["pods", "pods/log", "pods/exec", "events"]
+        verbs: ["create", "delete", "get", "list", "patch", "update", "deletecollection"]
+      - apiGroups: ["apps"]
+        resources: ["deployments", "replicasets", "statefulsets", "daemonsets"]
+        verbs: ["get", "list", "patch", "update"]
+      - apiGroups: ["batch"]
+        resources: ["jobs"]
+        verbs: ["create", "delete", "deletecollection", "get", "list", "patch", "update"]
+      - apiGroups: ["litmuschaos.io"]
+        resources: ["chaosengines", "chaosexperiments", "chaosresults"]
+        verbs: ["create", "delete", "get", "list", "patch", "update"]
+    image: "litmuschaos.docker.scarf.sh/litmuschaos/go-runner:3.28.0"
+    imagePullPolicy: Always
+    args: ["-c", "./experiments -name pod-network-latency"]
+    command: ["/bin/bash"]
+    env:
+      - name: TOTAL_CHAOS_DURATION
+        value: "60"
