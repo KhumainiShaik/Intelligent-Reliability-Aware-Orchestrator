@@ -177,9 +177,16 @@ jobs:
             echo "[$i/60] deployment image=${DEPLOY_IMAGE:-unknown}"
             echo "[$i/60] orchestratedrollout phase=${OROLL_PHASE:-unknown} strategy=${OROLL_STRATEGY:-unknown}"
 
+            REVISION_NOTE="mismatch"
+            if [ "${REVISION}" = "${EXPECTED_REVISION}" ] || \
+               [ "${REVISION}" = "${EXPECTED_REVISION:0:7}" ]; then
+              REVISION_NOTE="matches triggering commit"
+            fi
+            echo "[$i/60] revision check=${REVISION_NOTE}; expected=${EXPECTED_REVISION}"
+
             if [ "${SYNC}" = "Synced" ] && [ "${HEALTH}" = "Healthy" ] && \
-               [ "${REVISION}" = "${EXPECTED_REVISION}" ] && \
                [ "${DEPLOY_IMAGE}" = "${EXPECTED_IMAGE}" ] && \
+               [ "${OROLL_PHASE}" = "Completed" ] && \
                [ -n "${OROLL_STRATEGY}" ]; then
               APP_READY="true"
               break
@@ -214,6 +221,6 @@ jobs:
           echo "Expected workload image: ${EXPECTED_IMAGE}"
 
           if [ "${APP_READY}" != "true" ]; then
-            echo "Argo CD did not reconcile the triggering commit and workload image within 10 minutes."
+            echo "Argo CD did not reach Synced/Healthy with the declared image and completed OrchestratedRollout within 10 minutes."
             exit 1
           fi
