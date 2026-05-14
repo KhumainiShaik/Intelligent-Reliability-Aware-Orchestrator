@@ -14,18 +14,38 @@ kind: ClusterRole
 metadata:
   name: rollout-demo-dashboard-readonly
 rules:
-  - apiGroups: ["rollout.orchestrated.io"]
-    resources: ["orchestratedrollouts"]
-    verbs: ["get", "list", "watch"]
-  - apiGroups: ["apps"]
-    resources: ["deployments"]
-    verbs: ["get", "list", "watch"]
-  - apiGroups: ["autoscaling"]
-    resources: ["horizontalpodautoscalers"]
-    verbs: ["get", "list", "watch"]
-  - apiGroups: ["argoproj.io"]
-    resources: ["applications"]
-    verbs: ["get", "list", "watch"]
+- apiGroups:
+  - rollout.orchestrated.io
+  resources:
+  - orchestratedrollouts
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - autoscaling
+  resources:
+  - horizontalpodautoscalers
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - argoproj.io
+  resources:
+  - applications
+  verbs:
+  - get
+  - list
+  - watch
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -36,9 +56,9 @@ roleRef:
   kind: ClusterRole
   name: rollout-demo-dashboard-readonly
 subjects:
-  - kind: ServiceAccount
-    name: rollout-demo-dashboard
-    namespace: rollout-demo
+- kind: ServiceAccount
+  name: rollout-demo-dashboard
+  namespace: rollout-demo
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -57,16 +77,16 @@ spec:
     spec:
       serviceAccountName: rollout-demo-dashboard
       containers:
-        - name: dashboard
-          image: europe-west2-docker.pkg.dev/level-slate-494713-u5/oroll/rollout-demo-dashboard:latest
-          imagePullPolicy: Always
-          ports:
-            - containerPort: 8080
-          env:
-            - name: DEMO_NAMESPACES
-              value: workload-go,workload-cpu,workload-io,workload-mobilenet,workload-squeezenet,workload-tabular
-            - name: PROMETHEUS_URL
-              value: http://prometheus.monitoring.svc.cluster.local:9090
+      - name: dashboard
+        image: europe-west2-docker.pkg.dev/level-slate-494713-u5/oroll/rollout-demo-dashboard:gitops_demo_20260514_152618_135a5c9
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+        env:
+        - name: DEMO_NAMESPACES
+          value: workload-go,workload-cpu,workload-io,workload-mobilenet,workload-squeezenet,workload-tabular
+        - name: PROMETHEUS_URL
+          value: http://prometheus.monitoring.svc.cluster.local:9090
 ---
 apiVersion: v1
 kind: Service
@@ -78,6 +98,6 @@ spec:
   selector:
     app: rollout-demo-dashboard
   ports:
-    - name: http
-      port: 80
-      targetPort: 8080
+  - name: http
+    port: 80
+    targetPort: 8080
