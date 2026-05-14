@@ -101,7 +101,7 @@ spec:
                       description: Optional release objective used with trafficProfile; reliability favours safer pre-scale choices.
                     policyVariant:
                       type: string
-                      enum: [v12-contextual, v11, default]
+                      enum: [trained-contextual-policy, v12-contextual, v11, default]
                       description: Optional adaptive policy variant; v12-contextual is opt-in and v11 remains the default.
                     faultContext:
                       type: string

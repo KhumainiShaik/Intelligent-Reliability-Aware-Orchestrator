@@ -475,3 +475,57 @@ class TestFixedBaselineReconcile:
             ACTION_CANARY,
             pre_scale_extra_replicas=None,
         )
+
+
+class TestTrainedContextualReconcile:
+    """Tests that trained-contextual-policy uses the policy engine path."""
+
+    def test_trained_contextual_policy_uses_engine_and_records_strategy(
+        self,
+        monkeypatch,
+        default_config,
+    ) -> None:
+        policy_engine = MagicMock()
+        policy_engine.select_action.return_value = (ACTION_ROLLING, "trained-v11")
+        guardrails = MagicMock()
+        guardrails.apply.return_value = (ACTION_ROLLING, False, "")
+        registry = SimpleNamespace(
+            cfg=default_config,
+            snap_collector=MagicMock(
+                collect=MagicMock(return_value=DecisionSnapshot(error_rate=0.0))
+            ),
+            guardrails=guardrails,
+            materialiser=MagicMock(),
+            episode_logger=MagicMock(),
+            custom_api=MagicMock(),
+            policy_engine=policy_engine,
+        )
+        patch_status = MagicMock()
+        monkeypatch.setattr(reconciler, "_registry", registry)
+        monkeypatch.setattr(reconciler, "_patch_status", patch_status)
+
+        spec = {
+            "targetRef": {"name": "workload"},
+            "release": {"image": "repo", "tag": "v2"},
+            "actionSet": [ACTION_RL],
+            "rolloutHints": {
+                "trafficProfile": "ramp",
+                "objective": "reliability",
+                "policyVariant": "trained-contextual-policy",
+                "faultContext": "none",
+            },
+        }
+        body = {"metadata": {"name": "oroll", "namespace": "ns", "uid": "uid"}, "spec": spec}
+
+        result = reconcile(spec, {}, body["metadata"], "ns", "oroll", "uid", body)
+
+        assert result["chosenStrategy"] == ACTION_ROLLING
+        policy_engine.select_action.assert_called_once()
+        registry.materialiser.apply.assert_called_once_with(
+            body,
+            ACTION_ROLLING,
+            pre_scale_extra_replicas=None,
+        )
+        executing_status = patch_status.call_args_list[1].args[2]
+        assert executing_status["chosenStrategy"] == ACTION_ROLLING
+        assert executing_status["policyVersion"] == "trained-v11"

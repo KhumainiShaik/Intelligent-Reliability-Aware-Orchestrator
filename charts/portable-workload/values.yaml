@@ -49,8 +49,8 @@ orchestratedRollout:
   enabled: true
   actionSet:
     - rl
-    - pre-scale
-  trafficProfile: ramp
-  objective: reliability
-  policyVariant: v12-contextual
-  faultContext: none
+  rolloutHints:
+    trafficProfile: ramp
+    objective: reliability
+    policyVariant: v12-contextual
+    faultContext: none

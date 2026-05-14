@@ -5,23 +5,13 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/gitops-demo.yml"
-      - "demo-dashboard/Dockerfile"
-      - "demo-dashboard/app.py"
-      - "demo-dashboard/requirements.txt"
-      - "demo-dashboard/static/**"
-      - "demo-dashboard/templates/**"
-      - "demo/**"
-      - "gitops/**"
+      - "gitops/workloads/cpu-bound-fastapi/values.yaml"
       - "charts/portable-workload/**"
-      - "scripts/gitops/**"
+      - "workloads/cpu-bound-fastapi/**"
   workflow_dispatch:
     inputs:
-      monitor_duration_secs:
-        description: "How long to monitor rollout status"
-        required: false
-        default: "300"
       force_refresh:
-        description: "Explicitly request Argo CD hard refresh before verification"
+        description: "Explicitly request Argo CD hard refresh before read-only verification"
         required: false
         default: "false"
         type: choice
@@ -30,7 +20,7 @@ on:
           - "true"
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: gitops-demo-main
@@ -40,13 +30,10 @@ env:
   GCP_PROJECT_ID: level-slate-494713-u5
   GCP_REGION: europe-west2
   GKE_CLUSTER_NAME: orchestrated-rollout
-  AR_REPO: oroll
-  DASHBOARD_APP_NAME: rollout-demo-dashboard
-  DASHBOARD_MANIFEST_PATH: demo-dashboard/k8s/deployment.yaml
+  VALUES_PATH: gitops/workloads/cpu-bound-fastapi/values.yaml
   WORKLOAD_APP_NAME: workload-cpu-bound-fastapi
   WORKLOAD_NAMESPACE: workload-cpu
   ORCHESTRATED_ROLLOUT_NAME: cpu-bound-fastapi-portability-template
-  MONITOR_DURATION_SECS: ${{ github.event.inputs.monitor_duration_secs || '300' }}
   FORCE_REFRESH: ${{ github.event.inputs.force_refresh || 'false' }}
 
 jobs:
@@ -70,24 +57,55 @@ jobs:
           fi
           echo "Required GitHub secrets are present."
 
-  build-dashboard-image:
+  build-workload-image:
     runs-on: ubuntu-latest
     needs: preflight
     outputs:
-      dashboard-image: ${{ steps.meta.outputs.dashboard_image }}
-      dashboard-tag: ${{ steps.meta.outputs.dashboard_tag }}
+      workload-name: ${{ steps.values.outputs.workload_name }}
+      workload-image: ${{ steps.values.outputs.workload_image }}
+      image-repository: ${{ steps.values.outputs.image_repository }}
+      image-tag: ${{ steps.values.outputs.image_tag }}
     steps:
       - uses: actions/checkout@v4
 
-      - id: meta
-        name: Generate timestamped image tag
+      - name: Install values parser dependency
+        run: python3 -m pip install pyyaml
+
+      - id: values
+        name: Read image from GitOps values
         run: |
           set -euo pipefail
-          DASHBOARD_TAG="gitops_demo_$(date -u +%Y%m%d_%H%M%S)_${GITHUB_SHA::7}"
-          DASHBOARD_IMAGE="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${AR_REPO}/rollout-demo-dashboard:${DASHBOARD_TAG}"
-          echo "dashboard_tag=${DASHBOARD_TAG}" >> "${GITHUB_OUTPUT}"
-          echo "dashboard_image=${DASHBOARD_IMAGE}" >> "${GITHUB_OUTPUT}"
-          echo "Dashboard image: ${DASHBOARD_IMAGE}"
+          python3 <<'PY'
+          import os
+          from pathlib import Path
+
+          import yaml
+
+          values = yaml.safe_load(Path(os.environ["VALUES_PATH"]).read_text())
+          workload_name = values.get("workload", {}).get("name", "cpu-bound-fastapi")
+          image_repository = values["image"]["repository"]
+          image_tag = values["image"]["tag"]
+          image = f"{image_repository}:{image_tag}"
+          context = f"workloads/{workload_name}"
+
+          if image_tag.startswith("portability_"):
+              raise SystemExit(
+                  "Refusing to run demo with portability image tag. "
+                  "Commit the desired release tag, for example image.tag: v2.0.0."
+              )
+          if not Path(context, "Dockerfile").exists():
+              raise SystemExit(f"Dockerfile not found for workload context: {context}")
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as out:
+              out.write(f"workload_name={workload_name}\n")
+              out.write(f"image_repository={image_repository}\n")
+              out.write(f"image_tag={image_tag}\n")
+              out.write(f"workload_image={image}\n")
+              out.write(f"workload_context={context}\n")
+
+          print(f"Workload: {workload_name}")
+          print(f"Image declared by Git desired state: {image}")
+          PY
 
       - name: Docker login to Artifact Registry
         env:
@@ -99,89 +117,18 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build and push dashboard image
+      - name: Build and push declared workload image
         uses: docker/build-push-action@v6
         with:
-          context: demo-dashboard
-          file: demo-dashboard/Dockerfile
+          context: ${{ steps.values.outputs.workload_context }}
+          file: ${{ steps.values.outputs.workload_context }}/Dockerfile
           platforms: linux/amd64
           push: true
-          tags: ${{ steps.meta.outputs.dashboard_image }}
-
-  update-gitops-desired-state:
-    runs-on: ubuntu-latest
-    needs: build-dashboard-image
-    outputs:
-      desired-state-sha: ${{ steps.commit.outputs.sha }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: main
-
-      - name: Install manifest update dependency
-        run: python3 -m pip install pyyaml
-
-      - name: Update dashboard image in Git desired state
-        env:
-          DASHBOARD_IMAGE: ${{ needs.build-dashboard-image.outputs.dashboard-image }}
-        run: |
-          set -euo pipefail
-          python3 <<'PY'
-          import os
-          from pathlib import Path
-          import yaml
-
-          path = Path(os.environ["DASHBOARD_MANIFEST_PATH"])
-          docs = list(yaml.safe_load_all(path.read_text()))
-          image = os.environ["DASHBOARD_IMAGE"]
-
-          changed = False
-          for doc in docs:
-              if not isinstance(doc, dict):
-                  continue
-              if doc.get("kind") != "Deployment":
-                  continue
-              containers = (
-                  doc.get("spec", {})
-                  .get("template", {})
-                  .get("spec", {})
-                  .get("containers", [])
-              )
-              for container in containers:
-                  if container.get("name") == "dashboard":
-                      container["image"] = image
-                      changed = True
-
-          if not changed:
-              raise SystemExit("dashboard container not found in manifest")
-
-          path.write_text("---\n".join(yaml.safe_dump(doc, sort_keys=False) for doc in docs))
-          PY
-          git diff -- "${DASHBOARD_MANIFEST_PATH}"
-
-      - id: commit
-        name: Commit and push Git desired state
-        env:
-          DASHBOARD_TAG: ${{ needs.build-dashboard-image.outputs.dashboard-tag }}
-        run: |
-          set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if git diff --quiet -- "${DASHBOARD_MANIFEST_PATH}"; then
-            echo "No desired-state change to commit."
-            echo "sha=${GITHUB_SHA}" >> "${GITHUB_OUTPUT}"
-            exit 0
-          fi
-          git add "${DASHBOARD_MANIFEST_PATH}"
-          git commit -m "gitops: update dashboard image ${DASHBOARD_TAG}"
-          git push origin main
-          echo "sha=$(git rev-parse HEAD)" >> "${GITHUB_OUTPUT}"
+          tags: ${{ steps.values.outputs.workload_image }}
 
   verify-argocd-reconciliation:
     runs-on: ubuntu-latest
-    needs:
-      - build-dashboard-image
-      - update-gitops-desired-state
+    needs: build-workload-image
     steps:
       - uses: actions/checkout@v4
 
@@ -202,51 +149,67 @@ jobs:
 
       - name: Verify Argo CD reconciliation
         env:
-          DASHBOARD_IMAGE: ${{ needs.build-dashboard-image.outputs.dashboard-image }}
-          DESIRED_STATE_SHA: ${{ needs.update-gitops-desired-state.outputs.desired-state-sha }}
+          EXPECTED_IMAGE: ${{ needs.build-workload-image.outputs.workload-image }}
+          EXPECTED_REVISION: ${{ github.sha }}
         run: |
           set -euo pipefail
 
           if [ "${FORCE_REFRESH}" = "true" ]; then
             echo "force_refresh=true, explicitly requesting Argo CD hard refresh."
-            kubectl annotate application -n argocd "${DASHBOARD_APP_NAME}" \
-              argocd.argoproj.io/refresh=hard --overwrite
             kubectl annotate application -n argocd "${WORKLOAD_APP_NAME}" \
               argocd.argoproj.io/refresh=hard --overwrite
           fi
 
+          APP_READY="false"
           for i in $(seq 1 60); do
-            DASH_SYNC=$(kubectl get application -n argocd "${DASHBOARD_APP_NAME}" -o jsonpath='{.status.sync.status}' 2>/dev/null || true)
-            DASH_HEALTH=$(kubectl get application -n argocd "${DASHBOARD_APP_NAME}" -o jsonpath='{.status.health.status}' 2>/dev/null || true)
-            DASH_REVISION=$(kubectl get application -n argocd "${DASHBOARD_APP_NAME}" -o jsonpath='{.status.sync.revision}' 2>/dev/null || true)
-            WORKLOAD_SYNC=$(kubectl get application -n argocd "${WORKLOAD_APP_NAME}" -o jsonpath='{.status.sync.status}' 2>/dev/null || true)
-            WORKLOAD_HEALTH=$(kubectl get application -n argocd "${WORKLOAD_APP_NAME}" -o jsonpath='{.status.health.status}' 2>/dev/null || true)
-            WORKLOAD_REVISION=$(kubectl get application -n argocd "${WORKLOAD_APP_NAME}" -o jsonpath='{.status.sync.revision}' 2>/dev/null || true)
+            SYNC=$(kubectl get application -n argocd "${WORKLOAD_APP_NAME}" -o jsonpath='{.status.sync.status}' 2>/dev/null || true)
+            HEALTH=$(kubectl get application -n argocd "${WORKLOAD_APP_NAME}" -o jsonpath='{.status.health.status}' 2>/dev/null || true)
+            REVISION=$(kubectl get application -n argocd "${WORKLOAD_APP_NAME}" -o jsonpath='{.status.sync.revision}' 2>/dev/null || true)
+            DEPLOY_IMAGE=$(kubectl -n "${WORKLOAD_NAMESPACE}" get deployment cpu-bound-fastapi -o jsonpath='{.spec.template.spec.containers[?(@.name=="workload")].image}' 2>/dev/null || true)
+            OROLL_PHASE=$(kubectl -n "${WORKLOAD_NAMESPACE}" get orchestratedrollout "${ORCHESTRATED_ROLLOUT_NAME}" -o jsonpath='{.status.phase}' 2>/dev/null || true)
+            OROLL_STRATEGY=$(kubectl -n "${WORKLOAD_NAMESPACE}" get orchestratedrollout "${ORCHESTRATED_ROLLOUT_NAME}" -o jsonpath='{.status.chosenStrategy}' 2>/dev/null || true)
 
-            echo "[$i/60] dashboard sync=${DASH_SYNC:-unknown} health=${DASH_HEALTH:-unknown} revision=${DASH_REVISION:-unknown}"
-            echo "[$i/60] workload  sync=${WORKLOAD_SYNC:-unknown} health=${WORKLOAD_HEALTH:-unknown} revision=${WORKLOAD_REVISION:-unknown}"
+            echo "[$i/60] app sync=${SYNC:-unknown} health=${HEALTH:-unknown} revision=${REVISION:-unknown}"
+            echo "[$i/60] deployment image=${DEPLOY_IMAGE:-unknown}"
+            echo "[$i/60] orchestratedrollout phase=${OROLL_PHASE:-unknown} strategy=${OROLL_STRATEGY:-unknown}"
 
-            if [ "${DASH_SYNC}" = "Synced" ] && [ "${DASH_HEALTH}" = "Healthy" ] && \
-               [ "${WORKLOAD_SYNC}" = "Synced" ] && [ "${WORKLOAD_HEALTH}" = "Healthy" ]; then
+            if [ "${SYNC}" = "Synced" ] && [ "${HEALTH}" = "Healthy" ] && \
+               [ "${REVISION}" = "${EXPECTED_REVISION}" ] && \
+               [ "${DEPLOY_IMAGE}" = "${EXPECTED_IMAGE}" ] && \
+               [ -n "${OROLL_STRATEGY}" ]; then
+              APP_READY="true"
               break
             fi
             sleep 10
           done
 
           echo ""
-          echo "Argo CD Applications:"
-          kubectl get application -n argocd "${DASHBOARD_APP_NAME}" -o wide
+          echo "Argo CD application:"
           kubectl get application -n argocd "${WORKLOAD_APP_NAME}" -o wide
 
           echo ""
-          echo "Dashboard deployment image:"
-          kubectl -n rollout-demo get deployment rollout-demo-dashboard -o jsonpath='{.spec.template.spec.containers[?(@.name=="dashboard")].image}{"\n"}' || true
+          echo "Argo CD revision:"
+          kubectl get application -n argocd "${WORKLOAD_APP_NAME}" -o jsonpath='sync={.status.sync.status}{"\n"}health={.status.health.status}{"\n"}revision={.status.sync.revision}{"\n"}'
+
+          echo ""
+          echo "Workload deployment image:"
+          kubectl -n "${WORKLOAD_NAMESPACE}" get deployment cpu-bound-fastapi -o jsonpath='{.spec.template.spec.containers[?(@.name=="workload")].image}{"\n"}'
 
           echo ""
           echo "Latest OrchestratedRollout decision:"
           kubectl -n "${WORKLOAD_NAMESPACE}" get orchestratedrollout "${ORCHESTRATED_ROLLOUT_NAME}" \
-            -o jsonpath='{.metadata.name}{"\nphase="}{.status.phase}{"\nstrategy="}{.status.chosenStrategy}{"\nheadroom="}{.status.preScaleExtraReplicas}{"\nmessage="}{.status.message}{"\n"}' || true
+            -o jsonpath='{.metadata.name}{"\nphase="}{.status.phase}{"\nstrategy="}{.status.chosenStrategy}{"\nheadroom="}{.status.preScaleExtraReplicas}{"\npolicy="}{.status.policyVersion}{"\nmessage="}{.status.message}{"\n"}'
 
           echo ""
-          echo "Expected dashboard image: ${DASHBOARD_IMAGE}"
-          echo "Desired state commit: ${DESIRED_STATE_SHA}"
+          echo "Argo Rollout status:"
+          kubectl -n "${WORKLOAD_NAMESPACE}" get rollout cpu-bound-fastapi-rollout \
+            -o jsonpath='{.metadata.name}{"\nphase="}{.status.phase}{"\nhealthy="}{.status.healthy}{"\nmessage="}{.status.message}{"\n"}' || true
+
+          echo ""
+          echo "Expected triggering Git commit: ${EXPECTED_REVISION}"
+          echo "Expected workload image: ${EXPECTED_IMAGE}"
+
+          if [ "${APP_READY}" != "true" ]; then
+            echo "Argo CD did not reconcile the triggering commit and workload image within 10 minutes."
+            exit 1
+          fi

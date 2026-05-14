@@ -1,4 +1,5 @@
 {{- if .Values.orchestratedRollout.enabled }}
+{{- $rolloutHints := default dict .Values.orchestratedRollout.rolloutHints }}
 apiVersion: rollout.orchestrated.io/v1alpha1
 kind: OrchestratedRollout
 metadata:
@@ -22,10 +23,10 @@ spec:
     maxP95LatencyMs: {{ .Values.slo.p95Ms }}
     maxErrorRate: 0.01
   rolloutHints:
-    trafficProfile: {{ .Values.orchestratedRollout.trafficProfile | quote }}
-    objective: {{ .Values.orchestratedRollout.objective | quote }}
-    policyVariant: {{ .Values.orchestratedRollout.policyVariant | quote }}
-    faultContext: {{ .Values.orchestratedRollout.faultContext | quote }}
+    trafficProfile: {{ default .Values.orchestratedRollout.trafficProfile $rolloutHints.trafficProfile | quote }}
+    objective: {{ default .Values.orchestratedRollout.objective $rolloutHints.objective | quote }}
+    policyVariant: {{ default .Values.orchestratedRollout.policyVariant $rolloutHints.policyVariant | quote }}
+    faultContext: {{ default .Values.orchestratedRollout.faultContext $rolloutHints.faultContext | quote }}
     warmUpClass: {{ .Values.modelProfile.coldStartClass | quote }}
     imageSizeClass: {{ .Values.modelProfile.sizeClass | quote }}
 {{- end }}

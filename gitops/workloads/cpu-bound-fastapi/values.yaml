@@ -3,10 +3,10 @@ workload:
   name: cpu-bound-fastapi
   class: http
   kind: http
-  version: v1.0.0
+  version: v2.0.0
 image:
   repository: europe-west2-docker.pkg.dev/level-slate-494713-u5/oroll/cpu-bound-fastapi
-  tag: portability_20260509
+  tag: v2.0.0
   pullPolicy: IfNotPresent
 service:
   type: ClusterIP
@@ -40,11 +40,11 @@ modelProfile:
 serviceMonitor:
   enabled: false
 orchestratedRollout:
-  enabled: false
+  enabled: true
   actionSet:
     - rl
-    - pre-scale
-  trafficProfile: ramp
-  objective: reliability
-  policyVariant: v12-contextual
-  faultContext: none
+  rolloutHints:
+    trafficProfile: ramp
+    objective: reliability
+    policyVariant: v12-contextual
+    faultContext: none

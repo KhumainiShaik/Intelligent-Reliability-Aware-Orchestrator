@@ -59,6 +59,7 @@ TERMINAL_PHASES = {PHASE_COMPLETED, PHASE_FAILED, PHASE_ABORTED}
 ACTION_RL = "rl"
 ACTION_RULE_BASED = "rule-based"
 POLICY_VARIANT_V12 = "v12-contextual"
+POLICY_VARIANT_TRAINED_CONTEXTUAL = "trained-contextual-policy"
 FIXED_BASELINE_ACTIONS = {
     ACTION_DELAY,
     ACTION_PRE_SCALE,
@@ -185,6 +186,17 @@ def _is_v12_contextual(rollout_hints: dict | None) -> bool:
     hints = rollout_hints if isinstance(rollout_hints, dict) else {}
     variant = str(hints.get("policyVariant", "")).strip().lower()
     return variant in {POLICY_VARIANT_V12, "v12", "contextual-rl"}
+
+
+def _is_trained_contextual_policy(rollout_hints: dict | None) -> bool:
+    """True when rollout hints explicitly request the trained policy engine."""
+    hints = rollout_hints if isinstance(rollout_hints, dict) else {}
+    variant = str(hints.get("policyVariant", "")).strip().lower()
+    return variant in {
+        POLICY_VARIANT_TRAINED_CONTEXTUAL,
+        "trained-contextual",
+        "trained-rl",
+    }
 
 
 def _v12_contextual_decision(
@@ -525,6 +537,7 @@ def reconcile(
     # named "rule-based".
     is_rule_based_baseline = _is_rule_based_action_set(allowed_actions)
     is_fixed_baseline = _is_fixed_baseline_action_set(allowed_actions)
+    is_trained_contextual = _is_trained_contextual_policy(spec.get("rolloutHints"))
     is_v12_candidate = _is_v12_contextual(spec.get("rolloutHints"))
     if is_rule_based_baseline:
         chosen_action, rule_extra_replicas, rule_reason = _rule_based_decision(
@@ -544,6 +557,60 @@ def reconcile(
     elif is_fixed_baseline:
         chosen_action = str(allowed_actions[0])
         policy_version = f"baseline-{chosen_action}"
+    elif is_trained_contextual:
+        if reg.policy_engine is not None:
+            try:
+                chosen_action, policy_version = reg.policy_engine.select_action(
+                    snap, stress_score, _policy_allowed_actions(allowed_actions)
+                )
+                logger.info(
+                    "[%s/%s] Trained contextual policy decision: %s (policy=%s)",
+                    namespace,
+                    name,
+                    chosen_action,
+                    policy_version,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "[%s/%s] Trained policy inference failed — rule-based fallback: %s",
+                    namespace,
+                    name,
+                    exc,
+                )
+                chosen_action, rule_extra_replicas, rule_reason = _rule_based_decision(
+                    snap,
+                    stress_score,
+                    spec.get("rolloutHints"),
+                    spec.get("guardrailConfig"),
+                )
+                policy_version = f"{POLICY_VARIANT_TRAINED_CONTEXTUAL}-fallback"
+                logger.info(
+                    "[%s/%s] Fallback decision after trained policy failure: %s (%s)",
+                    namespace,
+                    name,
+                    chosen_action,
+                    rule_reason,
+                )
+        else:
+            logger.warning(
+                "[%s/%s] trained-contextual-policy requested but policy engine is unavailable",
+                namespace,
+                name,
+            )
+            chosen_action, rule_extra_replicas, rule_reason = _rule_based_decision(
+                snap,
+                stress_score,
+                spec.get("rolloutHints"),
+                spec.get("guardrailConfig"),
+            )
+            policy_version = f"{POLICY_VARIANT_TRAINED_CONTEXTUAL}-fallback"
+            logger.info(
+                "[%s/%s] Fallback decision without trained policy engine: %s (%s)",
+                namespace,
+                name,
+                chosen_action,
+                rule_reason,
+            )
     elif is_v12_candidate:
         chosen_action, v12_extra_replicas, v12_reason = _v12_contextual_decision(
             snap,
@@ -571,7 +638,12 @@ def reconcile(
             chosen_action = _rule_based(snap, stress_score)
             policy_version = "rule-based-fallback"
 
-    if not is_fixed_baseline and not is_rule_based_baseline and not is_v12_candidate:
+    if (
+        not is_fixed_baseline
+        and not is_rule_based_baseline
+        and not is_trained_contextual
+        and not is_v12_candidate
+    ):
         hinted_action, hint_overridden, hint_reason = _apply_rollout_hints(
             chosen_action,
             snap,
