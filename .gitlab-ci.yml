@@ -1,4 +1,5 @@
 stages:
+  - preflight
   - build
   - deploy
   - gitops-sync
@@ -30,7 +31,7 @@ variables:
   FAULT_CONTEXT: "none"
   MONITOR_DURATION_SECS: "300"
   GIT_DEPTH: "0"
-  DOCKER_TLS_CERTDIR: "/certs"
+  DOCKER_CONFIG: "/kaniko/.docker"
 
 .kubectl_context:
   before_script:
@@ -60,15 +61,44 @@ variables:
         kubectl config use-context "${KUBE_CONTEXT}"
       fi
 
+preflight:production-demo:
+  stage: preflight
+  image: alpine:3.20
+  script:
+    - |
+      set -euo pipefail
+      missing=0
+      require_var() {
+        if [ -z "$(eval "printf '%s' \"\${$1:-}\"")" ]; then
+          echo "missing required GitLab CI/CD variable: $1"
+          missing=1
+        fi
+      }
+      require_var GCP_SERVICE_ACCOUNT_KEY_B64
+      if [ "${missing}" -ne 0 ]; then
+        echo ""
+        echo "Bootstrap the fixed production variables once from a local machine:"
+        echo ""
+        echo "  cd aks85"
+        echo "  export GITLAB_TOKEN='<gitlab-api-token>'"
+        echo "  export GCP_SERVICE_ACCOUNT_KEY_FILE=\"\$HOME/keys/aks85-gitops-demo.json\""
+        echo "  ./scripts/gitops/bootstrap_gitlab_ci_variables.sh"
+        echo ""
+        exit 1
+      fi
+      echo "Production GitOps demo variables are present."
+      echo "Project=${GCP_PROJECT_ID} Region=${GCP_REGION} Cluster=${GKE_CLUSTER_NAME} ArtifactRepo=${AR_REPO}"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+
 build:dashboard-image:
   stage: build
-  image: docker:24.0.7
-  services:
-    - name: docker:24.0.7-dind
-      command: ["--tls=false"]
-  variables:
-    DOCKER_HOST: "tcp://docker:2375"
-    DOCKER_TLS_CERTDIR: ""
+  image:
+    name: gcr.io/kaniko-project/executor:debug
+    entrypoint: [""]
+  needs:
+    - preflight:production-demo
   script:
     - |
       set -euo pipefail
@@ -79,15 +109,18 @@ build:dashboard-image:
       echo "Dashboard image: ${DASHBOARD_IMAGE}"
       if [ -n "${GCP_SERVICE_ACCOUNT_KEY_B64:-}" ]; then
         echo "${GCP_SERVICE_ACCOUNT_KEY_B64}" | base64 -d > /tmp/gcp-key.json
-      elif [ -n "${GCP_SERVICE_ACCOUNT_KEY:-}" ]; then
-        printf '%s' "${GCP_SERVICE_ACCOUNT_KEY}" > /tmp/gcp-key.json
       else
-        echo "GCP_SERVICE_ACCOUNT_KEY_B64 or GCP_SERVICE_ACCOUNT_KEY is required"
+        echo "GCP_SERVICE_ACCOUNT_KEY_B64 is required"
         exit 1
       fi
-      cat /tmp/gcp-key.json | docker login -u _json_key --password-stdin "https://${GCP_REGION}-docker.pkg.dev"
-      docker buildx create --use --name aks85-builder || docker buildx use aks85-builder
-      docker buildx build --platform linux/amd64 -t "${DASHBOARD_IMAGE}" --push demo-dashboard
+      mkdir -p /kaniko/.docker
+      AUTH="$(printf '_json_key:%s' "$(cat /tmp/gcp-key.json)" | base64 | tr -d '\n')"
+      printf '{"auths":{"https://%s-docker.pkg.dev":{"auth":"%s"}}}\n' "${GCP_REGION}" "${AUTH}" > /kaniko/.docker/config.json
+      /kaniko/executor \
+        --context "${CI_PROJECT_DIR}/demo-dashboard" \
+        --dockerfile "${CI_PROJECT_DIR}/demo-dashboard/Dockerfile" \
+        --destination "${DASHBOARD_IMAGE}" \
+        --custom-platform linux/amd64
   artifacts:
     reports:
       dotenv: build.env
