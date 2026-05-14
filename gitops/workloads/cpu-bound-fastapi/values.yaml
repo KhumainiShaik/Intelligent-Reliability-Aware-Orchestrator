@@ -3,10 +3,10 @@ workload:
   name: cpu-bound-fastapi
   class: http
   kind: http
-  version: v2.0.0
+  version: v3.0.0
 image:
   repository: europe-west2-docker.pkg.dev/level-slate-494713-u5/oroll/cpu-bound-fastapi
-  tag: v2.0.0
+  tag: v3.0.0
   pullPolicy: IfNotPresent
 service:
   type: ClusterIP
