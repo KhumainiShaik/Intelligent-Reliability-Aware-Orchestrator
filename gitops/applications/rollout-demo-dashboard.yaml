@@ -1,7 +1,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: workload-io-latency-node
+  name: rollout-demo-dashboard
   namespace: argocd
   labels:
     app.kubernetes.io/part-of: orchestrated-rollout-portability
@@ -10,15 +10,12 @@ spec:
   source:
     repoURL: https://github.com/KhumainiShaik/Intelligent-Reliability-Aware-Orchestrator.git
     targetRevision: main
-    path: charts/portable-workload
-    helm:
-      releaseName: io-latency-node
-      valueFiles:
-        - values.yaml
-        - ../../gitops/workloads/io-latency-node/values.yaml
+    path: demo-dashboard/k8s
+    directory:
+      recurse: false
   destination:
     server: https://kubernetes.default.svc
-    namespace: workload-io
+    namespace: rollout-demo
   syncPolicy:
     automated:
       prune: true

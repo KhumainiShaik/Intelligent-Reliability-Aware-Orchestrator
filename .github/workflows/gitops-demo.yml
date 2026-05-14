@@ -5,7 +5,11 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/gitops-demo.yml"
-      - "demo-dashboard/**"
+      - "demo-dashboard/Dockerfile"
+      - "demo-dashboard/app.py"
+      - "demo-dashboard/requirements.txt"
+      - "demo-dashboard/static/**"
+      - "demo-dashboard/templates/**"
       - "demo/**"
       - "gitops/**"
       - "charts/portable-workload/**"
@@ -16,21 +20,34 @@ on:
         description: "How long to monitor rollout status"
         required: false
         default: "300"
+      force_refresh:
+        description: "Explicitly request Argo CD hard refresh before verification"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
 
 permissions:
-  contents: read
+  contents: write
+
+concurrency:
+  group: gitops-demo-main
+  cancel-in-progress: false
 
 env:
   GCP_PROJECT_ID: level-slate-494713-u5
   GCP_REGION: europe-west2
   GKE_CLUSTER_NAME: orchestrated-rollout
   AR_REPO: oroll
-  DASHBOARD_NAMESPACE: rollout-demo
-  DASHBOARD_DEPLOYMENT: rollout-demo-dashboard
+  DASHBOARD_APP_NAME: rollout-demo-dashboard
+  DASHBOARD_MANIFEST_PATH: demo-dashboard/k8s/deployment.yaml
   WORKLOAD_APP_NAME: workload-cpu-bound-fastapi
   WORKLOAD_NAMESPACE: workload-cpu
   ORCHESTRATED_ROLLOUT_NAME: cpu-bound-fastapi-portability-template
   MONITOR_DURATION_SECS: ${{ github.event.inputs.monitor_duration_secs || '300' }}
+  FORCE_REFRESH: ${{ github.event.inputs.force_refresh || 'false' }}
 
 jobs:
   preflight:
@@ -47,13 +64,13 @@ jobs:
             echo "Bootstrap it locally with:"
             echo "  cd aks85"
             echo "  export GITHUB_REPOSITORY='<owner>/<repo>'"
-            echo "  export GCP_SERVICE_ACCOUNT_KEY_FILE=\"\$HOME/keys/aks85-gitops-demo.json\""
+            echo "  export GCP_SERVICE_ACCOUNT_KEY_FILE=\"\$HOME/.config/aks85/github-actions-gitops-demo.json\""
             echo "  ./scripts/gitops/bootstrap_github_actions_secrets.sh"
             exit 1
           fi
           echo "Required GitHub secrets are present."
 
-  build-dashboard:
+  build-dashboard-image:
     runs-on: ubuntu-latest
     needs: preflight
     outputs:
@@ -71,14 +88,6 @@ jobs:
           echo "dashboard_tag=${DASHBOARD_TAG}" >> "${GITHUB_OUTPUT}"
           echo "dashboard_image=${DASHBOARD_IMAGE}" >> "${GITHUB_OUTPUT}"
           echo "Dashboard image: ${DASHBOARD_IMAGE}"
-
-      - name: Authenticate to Google Cloud
-        env:
-          GCP_SERVICE_ACCOUNT_KEY_B64: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY_B64 }}
-        run: |
-          set -euo pipefail
-          echo "${GCP_SERVICE_ACCOUNT_KEY_B64}" | base64 -d > "${RUNNER_TEMP}/gcp-key.json"
-          echo "GOOGLE_APPLICATION_CREDENTIALS=${RUNNER_TEMP}/gcp-key.json" >> "${GITHUB_ENV}"
 
       - name: Docker login to Artifact Registry
         env:
@@ -99,13 +108,84 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.dashboard_image }}
 
-  deploy-and-sync:
+  update-gitops-desired-state:
     runs-on: ubuntu-latest
-    needs: build-dashboard
+    needs: build-dashboard-image
+    outputs:
+      desired-state-sha: ${{ steps.commit.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Install manifest update dependency
+        run: python3 -m pip install pyyaml
+
+      - name: Update dashboard image in Git desired state
+        env:
+          DASHBOARD_IMAGE: ${{ needs.build-dashboard-image.outputs.dashboard-image }}
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          import os
+          from pathlib import Path
+          import yaml
+
+          path = Path(os.environ["DASHBOARD_MANIFEST_PATH"])
+          docs = list(yaml.safe_load_all(path.read_text()))
+          image = os.environ["DASHBOARD_IMAGE"]
+
+          changed = False
+          for doc in docs:
+              if not isinstance(doc, dict):
+                  continue
+              if doc.get("kind") != "Deployment":
+                  continue
+              containers = (
+                  doc.get("spec", {})
+                  .get("template", {})
+                  .get("spec", {})
+                  .get("containers", [])
+              )
+              for container in containers:
+                  if container.get("name") == "dashboard":
+                      container["image"] = image
+                      changed = True
+
+          if not changed:
+              raise SystemExit("dashboard container not found in manifest")
+
+          path.write_text("---\n".join(yaml.safe_dump(doc, sort_keys=False) for doc in docs))
+          PY
+          git diff -- "${DASHBOARD_MANIFEST_PATH}"
+
+      - id: commit
+        name: Commit and push Git desired state
+        env:
+          DASHBOARD_TAG: ${{ needs.build-dashboard-image.outputs.dashboard-tag }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet -- "${DASHBOARD_MANIFEST_PATH}"; then
+            echo "No desired-state change to commit."
+            echo "sha=${GITHUB_SHA}" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+          git add "${DASHBOARD_MANIFEST_PATH}"
+          git commit -m "gitops: update dashboard image ${DASHBOARD_TAG}"
+          git push origin main
+          echo "sha=$(git rev-parse HEAD)" >> "${GITHUB_OUTPUT}"
+
+  verify-argocd-reconciliation:
+    runs-on: ubuntu-latest
+    needs:
+      - build-dashboard-image
+      - update-gitops-desired-state
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Google Cloud SDK auth
+      - name: Install Google Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
         with:
           install_components: gke-gcloud-auth-plugin,kubectl
@@ -118,47 +198,55 @@ jobs:
           echo "${GCP_SERVICE_ACCOUNT_KEY_B64}" | base64 -d > "${RUNNER_TEMP}/gcp-key.json"
           gcloud auth activate-service-account --key-file="${RUNNER_TEMP}/gcp-key.json"
           gcloud config set project "${GCP_PROJECT_ID}"
-
-      - name: Install kubectl auth plugin
-        run: |
-          set -euo pipefail
           gcloud container clusters get-credentials "${GKE_CLUSTER_NAME}" --region "${GCP_REGION}" --project "${GCP_PROJECT_ID}"
 
-      - name: Deploy dashboard
+      - name: Verify Argo CD reconciliation
         env:
-          DASHBOARD_IMAGE: ${{ needs.build-dashboard.outputs.dashboard-image }}
+          DASHBOARD_IMAGE: ${{ needs.build-dashboard-image.outputs.dashboard-image }}
+          DESIRED_STATE_SHA: ${{ needs.update-gitops-desired-state.outputs.desired-state-sha }}
         run: |
           set -euo pipefail
-          kubectl apply -f demo-dashboard/k8s/deployment.yaml
-          kubectl -n "${DASHBOARD_NAMESPACE}" set image "deployment/${DASHBOARD_DEPLOYMENT}" "dashboard=${DASHBOARD_IMAGE}"
-          kubectl -n "${DASHBOARD_NAMESPACE}" rollout status "deployment/${DASHBOARD_DEPLOYMENT}" --timeout=5m
-          kubectl -n "${DASHBOARD_NAMESPACE}" get deployment "${DASHBOARD_DEPLOYMENT}" -o wide
-          kubectl -n "${DASHBOARD_NAMESPACE}" get pods -l app=rollout-demo-dashboard -o wide
 
-      - name: Refresh Argo CD application
-        run: |
-          set -euo pipefail
-          kubectl annotate application -n argocd "${WORKLOAD_APP_NAME}" \
-            argocd.argoproj.io/refresh=hard --overwrite
+          if [ "${FORCE_REFRESH}" = "true" ]; then
+            echo "force_refresh=true, explicitly requesting Argo CD hard refresh."
+            kubectl annotate application -n argocd "${DASHBOARD_APP_NAME}" \
+              argocd.argoproj.io/refresh=hard --overwrite
+            kubectl annotate application -n argocd "${WORKLOAD_APP_NAME}" \
+              argocd.argoproj.io/refresh=hard --overwrite
+          fi
+
           for i in $(seq 1 60); do
-            SYNC=$(kubectl get application -n argocd "${WORKLOAD_APP_NAME}" -o jsonpath='{.status.sync.status}' 2>/dev/null || true)
-            HEALTH=$(kubectl get application -n argocd "${WORKLOAD_APP_NAME}" -o jsonpath='{.status.health.status}' 2>/dev/null || true)
-            REVISION=$(kubectl get application -n argocd "${WORKLOAD_APP_NAME}" -o jsonpath='{.status.sync.revision}' 2>/dev/null || true)
-            echo "[$i/60] sync=${SYNC:-unknown} health=${HEALTH:-unknown} revision=${REVISION:-unknown}"
-            if [ "${SYNC}" = "Synced" ] && [ "${HEALTH}" = "Healthy" ]; then
+            DASH_SYNC=$(kubectl get application -n argocd "${DASHBOARD_APP_NAME}" -o jsonpath='{.status.sync.status}' 2>/dev/null || true)
+            DASH_HEALTH=$(kubectl get application -n argocd "${DASHBOARD_APP_NAME}" -o jsonpath='{.status.health.status}' 2>/dev/null || true)
+            DASH_REVISION=$(kubectl get application -n argocd "${DASHBOARD_APP_NAME}" -o jsonpath='{.status.sync.revision}' 2>/dev/null || true)
+            WORKLOAD_SYNC=$(kubectl get application -n argocd "${WORKLOAD_APP_NAME}" -o jsonpath='{.status.sync.status}' 2>/dev/null || true)
+            WORKLOAD_HEALTH=$(kubectl get application -n argocd "${WORKLOAD_APP_NAME}" -o jsonpath='{.status.health.status}' 2>/dev/null || true)
+            WORKLOAD_REVISION=$(kubectl get application -n argocd "${WORKLOAD_APP_NAME}" -o jsonpath='{.status.sync.revision}' 2>/dev/null || true)
+
+            echo "[$i/60] dashboard sync=${DASH_SYNC:-unknown} health=${DASH_HEALTH:-unknown} revision=${DASH_REVISION:-unknown}"
+            echo "[$i/60] workload  sync=${WORKLOAD_SYNC:-unknown} health=${WORKLOAD_HEALTH:-unknown} revision=${WORKLOAD_REVISION:-unknown}"
+
+            if [ "${DASH_SYNC}" = "Synced" ] && [ "${DASH_HEALTH}" = "Healthy" ] && \
+               [ "${WORKLOAD_SYNC}" = "Synced" ] && [ "${WORKLOAD_HEALTH}" = "Healthy" ]; then
               break
             fi
-            sleep 5
+            sleep 10
           done
+
+          echo ""
+          echo "Argo CD Applications:"
+          kubectl get application -n argocd "${DASHBOARD_APP_NAME}" -o wide
           kubectl get application -n argocd "${WORKLOAD_APP_NAME}" -o wide
 
-      - name: Monitor rollout
-        run: bash scripts/gitops/monitor_rollout.sh
+          echo ""
+          echo "Dashboard deployment image:"
+          kubectl -n rollout-demo get deployment rollout-demo-dashboard -o jsonpath='{.spec.template.spec.containers[?(@.name=="dashboard")].image}{"\n"}' || true
 
-      - name: Upload rollout status artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: rollout-status
-          path: rollout-status-*/
-          if-no-files-found: ignore
+          echo ""
+          echo "Latest OrchestratedRollout decision:"
+          kubectl -n "${WORKLOAD_NAMESPACE}" get orchestratedrollout "${ORCHESTRATED_ROLLOUT_NAME}" \
+            -o jsonpath='{.metadata.name}{"\nphase="}{.status.phase}{"\nstrategy="}{.status.chosenStrategy}{"\nheadroom="}{.status.preScaleExtraReplicas}{"\nmessage="}{.status.message}{"\n"}' || true
+
+          echo ""
+          echo "Expected dashboard image: ${DASHBOARD_IMAGE}"
+          echo "Desired state commit: ${DESIRED_STATE_SHA}"
