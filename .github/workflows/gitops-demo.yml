@@ -1,0 +1,163 @@
+name: GitOps Demo
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/gitops-demo.yml"
+      - "demo-dashboard/**"
+      - "demo/**"
+      - "gitops/**"
+      - "charts/portable-workload/**"
+      - "scripts/gitops/**"
+  workflow_dispatch:
+    inputs:
+      monitor_duration_secs:
+        description: "How long to monitor rollout status"
+        required: false
+        default: "300"
+
+permissions:
+  contents: read
+
+env:
+  GCP_PROJECT_ID: level-slate-494713-u5
+  GCP_REGION: europe-west2
+  GKE_CLUSTER_NAME: orchestrated-rollout
+  AR_REPO: oroll
+  DASHBOARD_NAMESPACE: rollout-demo
+  DASHBOARD_DEPLOYMENT: rollout-demo-dashboard
+  WORKLOAD_APP_NAME: workload-cpu-bound-fastapi
+  WORKLOAD_NAMESPACE: workload-cpu
+  ORCHESTRATED_ROLLOUT_NAME: cpu-bound-fastapi-portability-template
+  MONITOR_DURATION_SECS: ${{ github.event.inputs.monitor_duration_secs || '300' }}
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check required secrets
+        env:
+          GCP_SERVICE_ACCOUNT_KEY_B64: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY_B64 }}
+        run: |
+          set -euo pipefail
+          if [ -z "${GCP_SERVICE_ACCOUNT_KEY_B64}" ]; then
+            echo "Missing GitHub secret: GCP_SERVICE_ACCOUNT_KEY_B64"
+            echo ""
+            echo "Bootstrap it locally with:"
+            echo "  cd aks85"
+            echo "  export GITHUB_REPOSITORY='<owner>/<repo>'"
+            echo "  export GCP_SERVICE_ACCOUNT_KEY_FILE=\"\$HOME/keys/aks85-gitops-demo.json\""
+            echo "  ./scripts/gitops/bootstrap_github_actions_secrets.sh"
+            exit 1
+          fi
+          echo "Required GitHub secrets are present."
+
+  build-dashboard:
+    runs-on: ubuntu-latest
+    needs: preflight
+    outputs:
+      dashboard-image: ${{ steps.meta.outputs.dashboard_image }}
+      dashboard-tag: ${{ steps.meta.outputs.dashboard_tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: meta
+        name: Generate timestamped image tag
+        run: |
+          set -euo pipefail
+          DASHBOARD_TAG="gitops_demo_$(date -u +%Y%m%d_%H%M%S)_${GITHUB_SHA::7}"
+          DASHBOARD_IMAGE="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${AR_REPO}/rollout-demo-dashboard:${DASHBOARD_TAG}"
+          echo "dashboard_tag=${DASHBOARD_TAG}" >> "${GITHUB_OUTPUT}"
+          echo "dashboard_image=${DASHBOARD_IMAGE}" >> "${GITHUB_OUTPUT}"
+          echo "Dashboard image: ${DASHBOARD_IMAGE}"
+
+      - name: Authenticate to Google Cloud
+        env:
+          GCP_SERVICE_ACCOUNT_KEY_B64: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY_B64 }}
+        run: |
+          set -euo pipefail
+          echo "${GCP_SERVICE_ACCOUNT_KEY_B64}" | base64 -d > "${RUNNER_TEMP}/gcp-key.json"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=${RUNNER_TEMP}/gcp-key.json" >> "${GITHUB_ENV}"
+
+      - name: Docker login to Artifact Registry
+        env:
+          GCP_SERVICE_ACCOUNT_KEY_B64: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY_B64 }}
+        run: |
+          set -euo pipefail
+          echo "${GCP_SERVICE_ACCOUNT_KEY_B64}" | base64 -d | docker login -u _json_key --password-stdin "https://${GCP_REGION}-docker.pkg.dev"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push dashboard image
+        uses: docker/build-push-action@v6
+        with:
+          context: demo-dashboard
+          file: demo-dashboard/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.dashboard_image }}
+
+  deploy-and-sync:
+    runs-on: ubuntu-latest
+    needs: build-dashboard
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Google Cloud SDK auth
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Authenticate to Google Cloud
+        env:
+          GCP_SERVICE_ACCOUNT_KEY_B64: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY_B64 }}
+        run: |
+          set -euo pipefail
+          echo "${GCP_SERVICE_ACCOUNT_KEY_B64}" | base64 -d > "${RUNNER_TEMP}/gcp-key.json"
+          gcloud auth activate-service-account --key-file="${RUNNER_TEMP}/gcp-key.json"
+          gcloud config set project "${GCP_PROJECT_ID}"
+
+      - name: Install kubectl auth plugin
+        run: |
+          set -euo pipefail
+          gcloud components install kubectl gke-gcloud-auth-plugin --quiet
+          gcloud container clusters get-credentials "${GKE_CLUSTER_NAME}" --region "${GCP_REGION}" --project "${GCP_PROJECT_ID}"
+
+      - name: Deploy dashboard
+        env:
+          DASHBOARD_IMAGE: ${{ needs.build-dashboard.outputs.dashboard-image }}
+        run: |
+          set -euo pipefail
+          kubectl apply -f demo-dashboard/k8s/deployment.yaml
+          kubectl -n "${DASHBOARD_NAMESPACE}" set image "deployment/${DASHBOARD_DEPLOYMENT}" "dashboard=${DASHBOARD_IMAGE}"
+          kubectl -n "${DASHBOARD_NAMESPACE}" rollout status "deployment/${DASHBOARD_DEPLOYMENT}" --timeout=5m
+          kubectl -n "${DASHBOARD_NAMESPACE}" get deployment "${DASHBOARD_DEPLOYMENT}" -o wide
+          kubectl -n "${DASHBOARD_NAMESPACE}" get pods -l app=rollout-demo-dashboard -o wide
+
+      - name: Refresh Argo CD application
+        run: |
+          set -euo pipefail
+          kubectl annotate application -n argocd "${WORKLOAD_APP_NAME}" \
+            argocd.argoproj.io/refresh=hard --overwrite
+          for i in $(seq 1 60); do
+            SYNC=$(kubectl get application -n argocd "${WORKLOAD_APP_NAME}" -o jsonpath='{.status.sync.status}' 2>/dev/null || true)
+            HEALTH=$(kubectl get application -n argocd "${WORKLOAD_APP_NAME}" -o jsonpath='{.status.health.status}' 2>/dev/null || true)
+            REVISION=$(kubectl get application -n argocd "${WORKLOAD_APP_NAME}" -o jsonpath='{.status.sync.revision}' 2>/dev/null || true)
+            echo "[$i/60] sync=${SYNC:-unknown} health=${HEALTH:-unknown} revision=${REVISION:-unknown}"
+            if [ "${SYNC}" = "Synced" ] && [ "${HEALTH}" = "Healthy" ]; then
+              break
+            fi
+            sleep 5
+          done
+          kubectl get application -n argocd "${WORKLOAD_APP_NAME}" -o wide
+
+      - name: Monitor rollout
+        run: bash scripts/gitops/monitor_rollout.sh
+
+      - name: Upload rollout status artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rollout-status
+          path: rollout-status-*/
+          if-no-files-found: ignore
