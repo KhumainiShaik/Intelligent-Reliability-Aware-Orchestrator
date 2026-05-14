@@ -14,6 +14,7 @@ workflow:
 variables:
   GCP_PROJECT_ID: "level-slate-494713-u5"
   GCP_REGION: "europe-west2"
+  GKE_CLUSTER_NAME: "orchestrated-rollout"
   AR_REPO: "oroll"
   DASHBOARD_NAMESPACE: "rollout-demo"
   DASHBOARD_DEPLOYMENT: "rollout-demo-dashboard"
@@ -33,6 +34,22 @@ variables:
 
 .kubectl_context:
   before_script:
+    - |
+      if ! command -v kubectl >/dev/null 2>&1; then
+        gcloud components install kubectl gke-gcloud-auth-plugin --quiet
+      fi
+    - |
+      if [ -n "${GCP_SERVICE_ACCOUNT_KEY_B64:-}" ]; then
+        echo "${GCP_SERVICE_ACCOUNT_KEY_B64}" | base64 -d > /tmp/gcp-key.json
+        gcloud auth activate-service-account --key-file=/tmp/gcp-key.json
+        gcloud config set project "${GCP_PROJECT_ID}"
+        gcloud container clusters get-credentials "${GKE_CLUSTER_NAME}" --region "${GCP_REGION}" --project "${GCP_PROJECT_ID}"
+      elif [ -n "${GCP_SERVICE_ACCOUNT_KEY:-}" ]; then
+        printf '%s' "${GCP_SERVICE_ACCOUNT_KEY}" > /tmp/gcp-key.json
+        gcloud auth activate-service-account --key-file=/tmp/gcp-key.json
+        gcloud config set project "${GCP_PROJECT_ID}"
+        gcloud container clusters get-credentials "${GKE_CLUSTER_NAME}" --region "${GCP_REGION}" --project "${GCP_PROJECT_ID}"
+      fi
     - |
       if [ -n "${KUBECONFIG_B64:-}" ]; then
         echo "${KUBECONFIG_B64}" | base64 -d > kubeconfig
@@ -60,8 +77,15 @@ build:dashboard-image:
       echo "DASHBOARD_TAG=${DASHBOARD_TAG}" | tee build.env
       echo "DASHBOARD_IMAGE=${DASHBOARD_IMAGE}" | tee -a build.env
       echo "Dashboard image: ${DASHBOARD_IMAGE}"
-      test -n "${GCP_SERVICE_ACCOUNT_KEY:-}" || { echo "GCP_SERVICE_ACCOUNT_KEY is required"; exit 1; }
-      printf '%s' "${GCP_SERVICE_ACCOUNT_KEY}" | docker login -u _json_key --password-stdin "https://${GCP_REGION}-docker.pkg.dev"
+      if [ -n "${GCP_SERVICE_ACCOUNT_KEY_B64:-}" ]; then
+        echo "${GCP_SERVICE_ACCOUNT_KEY_B64}" | base64 -d > /tmp/gcp-key.json
+      elif [ -n "${GCP_SERVICE_ACCOUNT_KEY:-}" ]; then
+        printf '%s' "${GCP_SERVICE_ACCOUNT_KEY}" > /tmp/gcp-key.json
+      else
+        echo "GCP_SERVICE_ACCOUNT_KEY_B64 or GCP_SERVICE_ACCOUNT_KEY is required"
+        exit 1
+      fi
+      cat /tmp/gcp-key.json | docker login -u _json_key --password-stdin "https://${GCP_REGION}-docker.pkg.dev"
       docker buildx create --use --name aks85-builder || docker buildx use aks85-builder
       docker buildx build --platform linux/amd64 -t "${DASHBOARD_IMAGE}" --push demo-dashboard
   artifacts:
@@ -74,7 +98,7 @@ build:dashboard-image:
 
 deploy:dashboard:
   stage: deploy
-  image: bitnami/kubectl:1.30
+  image: google/cloud-sdk:latest
   extends: .kubectl_context
   needs:
     - job: build:dashboard-image
@@ -98,7 +122,7 @@ deploy:dashboard:
 
 argocd:refresh:
   stage: gitops-sync
-  image: bitnami/kubectl:1.30
+  image: google/cloud-sdk:latest
   extends: .kubectl_context
   needs:
     - deploy:dashboard
@@ -129,7 +153,7 @@ argocd:refresh:
 
 monitor:rollout:
   stage: monitor
-  image: bitnami/kubectl:1.30
+  image: google/cloud-sdk:latest
   extends: .kubectl_context
   needs:
     - argocd:refresh
