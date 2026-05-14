@@ -107,6 +107,8 @@ jobs:
 
       - name: Install Google Cloud SDK auth
         uses: google-github-actions/setup-gcloud@v2
+        with:
+          install_components: gke-gcloud-auth-plugin,kubectl
 
       - name: Authenticate to Google Cloud
         env:
@@ -120,7 +122,6 @@ jobs:
       - name: Install kubectl auth plugin
         run: |
           set -euo pipefail
-          gcloud components install kubectl gke-gcloud-auth-plugin --quiet
           gcloud container clusters get-credentials "${GKE_CLUSTER_NAME}" --region "${GCP_REGION}" --project "${GCP_PROJECT_ID}"
 
       - name: Deploy dashboard
