@@ -129,6 +129,7 @@ jobs:
   verify-argocd-reconciliation:
     runs-on: ubuntu-latest
     needs: build-workload-image
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -153,21 +154,24 @@ jobs:
           EXPECTED_REVISION: ${{ github.sha }}
         run: |
           set -euo pipefail
+          k() {
+            kubectl --request-timeout=15s "$@"
+          }
 
           if [ "${FORCE_REFRESH}" = "true" ]; then
             echo "force_refresh=true, explicitly requesting Argo CD hard refresh."
-            kubectl annotate application -n argocd "${WORKLOAD_APP_NAME}" \
+            k annotate application -n argocd "${WORKLOAD_APP_NAME}" \
               argocd.argoproj.io/refresh=hard --overwrite
           fi
 
           APP_READY="false"
           for i in $(seq 1 60); do
-            SYNC=$(kubectl get application -n argocd "${WORKLOAD_APP_NAME}" -o jsonpath='{.status.sync.status}' 2>/dev/null || true)
-            HEALTH=$(kubectl get application -n argocd "${WORKLOAD_APP_NAME}" -o jsonpath='{.status.health.status}' 2>/dev/null || true)
-            REVISION=$(kubectl get application -n argocd "${WORKLOAD_APP_NAME}" -o jsonpath='{.status.sync.revision}' 2>/dev/null || true)
-            DEPLOY_IMAGE=$(kubectl -n "${WORKLOAD_NAMESPACE}" get deployment cpu-bound-fastapi -o jsonpath='{.spec.template.spec.containers[?(@.name=="workload")].image}' 2>/dev/null || true)
-            OROLL_PHASE=$(kubectl -n "${WORKLOAD_NAMESPACE}" get orchestratedrollout "${ORCHESTRATED_ROLLOUT_NAME}" -o jsonpath='{.status.phase}' 2>/dev/null || true)
-            OROLL_STRATEGY=$(kubectl -n "${WORKLOAD_NAMESPACE}" get orchestratedrollout "${ORCHESTRATED_ROLLOUT_NAME}" -o jsonpath='{.status.chosenStrategy}' 2>/dev/null || true)
+            SYNC=$(k get application -n argocd "${WORKLOAD_APP_NAME}" -o jsonpath='{.status.sync.status}' 2>/dev/null || true)
+            HEALTH=$(k get application -n argocd "${WORKLOAD_APP_NAME}" -o jsonpath='{.status.health.status}' 2>/dev/null || true)
+            REVISION=$(k get application -n argocd "${WORKLOAD_APP_NAME}" -o jsonpath='{.status.sync.revision}' 2>/dev/null || true)
+            DEPLOY_IMAGE=$(k -n "${WORKLOAD_NAMESPACE}" get deployment cpu-bound-fastapi -o jsonpath='{.spec.template.spec.containers[?(@.name=="workload")].image}' 2>/dev/null || true)
+            OROLL_PHASE=$(k -n "${WORKLOAD_NAMESPACE}" get orchestratedrollout "${ORCHESTRATED_ROLLOUT_NAME}" -o jsonpath='{.status.phase}' 2>/dev/null || true)
+            OROLL_STRATEGY=$(k -n "${WORKLOAD_NAMESPACE}" get orchestratedrollout "${ORCHESTRATED_ROLLOUT_NAME}" -o jsonpath='{.status.chosenStrategy}' 2>/dev/null || true)
 
             echo "[$i/60] app sync=${SYNC:-unknown} health=${HEALTH:-unknown} revision=${REVISION:-unknown}"
             echo "[$i/60] deployment image=${DEPLOY_IMAGE:-unknown}"
@@ -185,24 +189,24 @@ jobs:
 
           echo ""
           echo "Argo CD application:"
-          kubectl get application -n argocd "${WORKLOAD_APP_NAME}" -o wide
+          k get application -n argocd "${WORKLOAD_APP_NAME}" -o wide || true
 
           echo ""
           echo "Argo CD revision:"
-          kubectl get application -n argocd "${WORKLOAD_APP_NAME}" -o jsonpath='sync={.status.sync.status}{"\n"}health={.status.health.status}{"\n"}revision={.status.sync.revision}{"\n"}'
+          k get application -n argocd "${WORKLOAD_APP_NAME}" -o jsonpath='sync={.status.sync.status}{"\n"}health={.status.health.status}{"\n"}revision={.status.sync.revision}{"\n"}' || true
 
           echo ""
           echo "Workload deployment image:"
-          kubectl -n "${WORKLOAD_NAMESPACE}" get deployment cpu-bound-fastapi -o jsonpath='{.spec.template.spec.containers[?(@.name=="workload")].image}{"\n"}'
+          k -n "${WORKLOAD_NAMESPACE}" get deployment cpu-bound-fastapi -o jsonpath='{.spec.template.spec.containers[?(@.name=="workload")].image}{"\n"}' || true
 
           echo ""
           echo "Latest OrchestratedRollout decision:"
-          kubectl -n "${WORKLOAD_NAMESPACE}" get orchestratedrollout "${ORCHESTRATED_ROLLOUT_NAME}" \
-            -o jsonpath='{.metadata.name}{"\nphase="}{.status.phase}{"\nstrategy="}{.status.chosenStrategy}{"\nheadroom="}{.status.preScaleExtraReplicas}{"\npolicy="}{.status.policyVersion}{"\nmessage="}{.status.message}{"\n"}'
+          k -n "${WORKLOAD_NAMESPACE}" get orchestratedrollout "${ORCHESTRATED_ROLLOUT_NAME}" \
+            -o jsonpath='{.metadata.name}{"\nphase="}{.status.phase}{"\nstrategy="}{.status.chosenStrategy}{"\nheadroom="}{.status.preScaleExtraReplicas}{"\npolicy="}{.status.policyVersion}{"\nmessage="}{.status.message}{"\n"}' || true
 
           echo ""
           echo "Argo Rollout status:"
-          kubectl -n "${WORKLOAD_NAMESPACE}" get rollout cpu-bound-fastapi-rollout \
+          k -n "${WORKLOAD_NAMESPACE}" get rollout cpu-bound-fastapi-rollout \
             -o jsonpath='{.metadata.name}{"\nphase="}{.status.phase}{"\nhealthy="}{.status.healthy}{"\nmessage="}{.status.message}{"\n"}' || true
 
           echo ""
