@@ -29,6 +29,7 @@ DEFAULT_MAX_ROLLOUT_TIME_SECONDS = 600
 
 # Helper: extract guardrail config values from CR spec
 
+
 def _cfg_int(config: dict | None, key: str, default: int) -> int:
     """Safely extract an integer from the guardrailConfig dict."""
     if config and key in config:

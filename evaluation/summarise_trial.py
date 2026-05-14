@@ -147,7 +147,9 @@ def summarise_trial(args: argparse.Namespace) -> dict[str, Any]:
             "  Fault injection:     "
             f"{metrics['chaos_phase'] or 'unknown'} / {metrics['chaos_verdict'] or 'unknown'}"
         )
-    print(f"  Throughput:          {_fmt_rate(metrics['throughput_rps'])} ({request_count:,} requests)")
+    print(
+        f"  Throughput:          {_fmt_rate(metrics['throughput_rps'])} ({request_count:,} requests)"
+    )
     print(
         "  HTTP latency:        "
         f"avg={_fmt_ms(metrics['http_latency']['avg_ms'])}, "
@@ -246,7 +248,9 @@ def aggregate(args: argparse.Namespace) -> dict[str, Any]:
             f"{', '.join(f'+{k}={v}' for k, v in sorted(pre_scale_extra.items()))}"
         )
     if chaos_verdicts:
-        print(f"  Chaos verdicts:      {', '.join(f'{k}={v}' for k, v in sorted(chaos_verdicts.items()))}")
+        print(
+            f"  Chaos verdicts:      {', '.join(f'{k}={v}' for k, v in sorted(chaos_verdicts.items()))}"
+        )
     print(f"  Total requests:      {total_requests:,}")
     print(f"  Failed requests:     {total_failed:,}")
     print(f"  Mean throughput:     {_fmt_rate(result['mean_throughput_rps'])}")

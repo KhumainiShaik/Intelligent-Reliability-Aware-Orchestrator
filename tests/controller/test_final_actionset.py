@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pandas as pd
 import yaml
 
 from evaluation.final_statistics import MODE_LABELS as FINAL_STAT_MODE_LABELS
@@ -11,8 +12,6 @@ from evaluation.final_statistics import _mode_from_shard as final_stats_mode_fro
 from evaluation.summarise_comparison_metrics import MODE_LABELS as SUMMARY_MODE_LABELS
 from evaluation.summarise_comparison_metrics import _decision_distribution
 from evaluation.summarise_comparison_metrics import _mode_from_shard as summary_mode_from_shard
-import pandas as pd
-
 
 FINAL_MODES = ["rl", "rule-based", "rolling", "canary", "pre-scale", "delay"]
 BASELINE_MODES = ["rolling", "canary", "pre-scale", "delay", "rule-based"]
@@ -20,9 +19,9 @@ BASELINE_MODES = ["rolling", "canary", "pre-scale", "delay", "rule-based"]
 
 def _action_set_enum(path: Path) -> list[str]:
     data = yaml.safe_load(path.read_text(encoding="utf-8"))
-    spec_props = data["spec"]["versions"][0]["schema"]["openAPIV3Schema"]["properties"][
-        "spec"
-    ]["properties"]
+    spec_props = data["spec"]["versions"][0]["schema"]["openAPIV3Schema"]["properties"]["spec"][
+        "properties"
+    ]
     return spec_props["actionSet"]["items"]["enum"]
 
 

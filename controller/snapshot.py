@@ -20,6 +20,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+
 @dataclass
 class DecisionSnapshot:
     """All signals collected at deploy time for strategy selection."""

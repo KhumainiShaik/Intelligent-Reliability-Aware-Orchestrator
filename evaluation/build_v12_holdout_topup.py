@@ -109,7 +109,9 @@ def build(source: Path, output: Path, target_repeats: int, shard_count: int, for
                     missing_by_fault[fault] += 1
 
     with (output / "missing_trials.csv").open("w", newline="", encoding="utf-8") as fh:
-        writer = csv.DictWriter(fh, fieldnames=["mode", "scenario", "fault", "repeat", "shard", "status"])
+        writer = csv.DictWriter(
+            fh, fieldnames=["mode", "scenario", "fault", "repeat", "shard", "status"]
+        )
         writer.writeheader()
         writer.writerows(missing_rows)
 
@@ -119,7 +121,9 @@ def build(source: Path, output: Path, target_repeats: int, shard_count: int, for
         writer.writerow(["source", source])
         writer.writerow(["output", output])
         writer.writerow(["target_repeats", target_repeats])
-        writer.writerow(["target_trials", len(MODES) * len(SCENARIOS) * len(FAULTS) * target_repeats])
+        writer.writerow(
+            ["target_trials", len(MODES) * len(SCENARIOS) * len(FAULTS) * target_repeats]
+        )
         writer.writerow(["reused_trials", reused])
         writer.writerow(["missing_trials", len(missing_rows)])
 
@@ -139,8 +143,12 @@ def build(source: Path, output: Path, target_repeats: int, shard_count: int, for
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--source", type=Path, default=Path("results/comparison_20260508_v12_holdout_30"))
-    parser.add_argument("--output", type=Path, default=Path("results/comparison_20260512_v12_holdout_60"))
+    parser.add_argument(
+        "--source", type=Path, default=Path("results/comparison_20260508_v12_holdout_30")
+    )
+    parser.add_argument(
+        "--output", type=Path, default=Path("results/comparison_20260512_v12_holdout_60")
+    )
     parser.add_argument("--target-repeats", type=int, default=2)
     parser.add_argument("--shard-count", type=int, default=3)
     parser.add_argument("--force", action="store_true")

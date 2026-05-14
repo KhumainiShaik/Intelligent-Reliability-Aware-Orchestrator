@@ -192,7 +192,9 @@ def build(source: Path, output: Path, target_repeats: int, shard_count: int) -> 
         writer = csv.writer(fh)
         writer.writerow(["item", "value"])
         writer.writerow(["target_repeats", target_repeats])
-        writer.writerow(["target_trials", len(MODES) * len(SCENARIOS) * len(FAULTS) * target_repeats])
+        writer.writerow(
+            ["target_trials", len(MODES) * len(SCENARIOS) * len(FAULTS) * target_repeats]
+        )
         writer.writerow(["selected_completed_trials", selected])
         writer.writerow(["missing_trials", len(missing_rows)])
         for mode in MODES:
@@ -220,8 +222,12 @@ def build(source: Path, output: Path, target_repeats: int, shard_count: int) -> 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--source", type=Path, default=Path("results/comparison_20260507_full_actionset_108"))
-    parser.add_argument("--output", type=Path, default=Path("results/comparison_20260508_balanced_actionset_72"))
+    parser.add_argument(
+        "--source", type=Path, default=Path("results/comparison_20260507_full_actionset_108")
+    )
+    parser.add_argument(
+        "--output", type=Path, default=Path("results/comparison_20260508_balanced_actionset_72")
+    )
     parser.add_argument("--target-repeats", type=int, default=2)
     parser.add_argument("--shard-count", type=int, default=3)
     parser.add_argument("--force", action="store_true")

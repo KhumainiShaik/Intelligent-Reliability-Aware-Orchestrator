@@ -66,6 +66,7 @@ if TYPE_CHECKING:
 def _clamp(v: float, lo: float = 0.0, hi: float = 1.0) -> float:
     return max(lo, min(hi, v))
 
+
 @dataclass
 class Calculator:
     """Weighted StressScore calculator with EWMA trend detection.
@@ -147,9 +148,7 @@ class Calculator:
             self._ewma_rps = snap.rps
             self._initialised = True
         else:
-            self._ewma_latency = (
-                self.alpha * p95_safe + (1 - self.alpha) * self._ewma_latency
-            )
+            self._ewma_latency = self.alpha * p95_safe + (1 - self.alpha) * self._ewma_latency
             self._ewma_rps = self.alpha * snap.rps + (1 - self.alpha) * self._ewma_rps
 
         # Trend boost: rising latency above EWMA → additional stress

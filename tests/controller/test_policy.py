@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 import pytest
 
@@ -14,9 +13,6 @@ from controller.policy import (
     _digitise,
 )
 from controller.snapshot import DecisionSnapshot
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 
 class TestPolicyArtifact:

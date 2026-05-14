@@ -69,6 +69,7 @@ FIXED_BASELINE_ACTIONS = {
 
 # Dependency registry (initialised once at startup)
 
+
 @dataclass
 class _Registry:
     """Holds references to all sub-modules, initialised once at startup."""
@@ -119,6 +120,7 @@ def _init_registry(cfg: ControllerConfig) -> _Registry:
 
 
 # Rule-based fallback/baseline policy
+
 
 def _rule_based_decision(
     snap: DecisionSnapshot,
@@ -198,7 +200,11 @@ def _v12_contextual_decision(
     rolling, pre-scale +3/+5/+7, and delay for extreme safety cases.
     """
     profile, fault, objective = _rollout_context(rollout_hints)
-    max_extra = max(7, get_max_extra_replicas(guardrail_cfg)) if _is_v12_contextual(rollout_hints) else get_max_extra_replicas(guardrail_cfg)
+    max_extra = (
+        max(7, get_max_extra_replicas(guardrail_cfg))
+        if _is_v12_contextual(rollout_hints)
+        else get_max_extra_replicas(guardrail_cfg)
+    )
     hpa_gap = snap.hpa_desired_replicas - snap.hpa_current_replicas
     live_pressure = (
         snap.pending_pods > 0
@@ -230,7 +236,11 @@ def _v12_contextual_decision(
     if profile == "ramp" and not fault_active:
         return ACTION_PRE_SCALE, min(max_extra, 3), "v12 ramp/none pressure -> pre-scale-3"
 
-    if profile == "spike" and fault_active and (hpa_gap > 0 or snap.node_cpu_util >= 0.70 or stress_score >= 0.10):
+    if (
+        profile == "spike"
+        and fault_active
+        and (hpa_gap > 0 or snap.node_cpu_util >= 0.70 or stress_score >= 0.10)
+    ):
         return ACTION_PRE_SCALE, min(max_extra, 7), "v12 high-risk spike/fault -> pre-scale-7"
 
     if profile == "spike":
@@ -279,9 +289,7 @@ def _policy_allowed_actions(allowed_actions: Any) -> list[str] | None:
     if not isinstance(allowed_actions, list):
         return None
     actions = [
-        str(item).strip()
-        for item in allowed_actions
-        if str(item).strip() in FIXED_BASELINE_ACTIONS
+        str(item).strip() for item in allowed_actions if str(item).strip() in FIXED_BASELINE_ACTIONS
     ]
     return actions or None
 
@@ -321,13 +329,17 @@ def _apply_rollout_hints(
     elif profile == "ramp":
         candidate = ACTION_ROLLING
     elif profile == "steady":
-        candidate = ACTION_CANARY if stress_score < 0.25 and snap.error_rate <= 0.01 else ACTION_ROLLING
+        candidate = (
+            ACTION_CANARY if stress_score < 0.25 and snap.error_rate <= 0.01 else ACTION_ROLLING
+        )
 
     if not candidate or candidate == action or not _is_action_allowed(candidate, allowed_actions):
         return action, False, ""
 
-    return candidate, True, (
-        f"rollout hint trafficProfile={profile}, objective={objective} -> {candidate}"
+    return (
+        candidate,
+        True,
+        (f"rollout hint trafficProfile={profile}, objective={objective} -> {candidate}"),
     )
 
 
@@ -373,10 +385,14 @@ def _adaptive_pre_scale_extra_replicas(
     extra = max(3, min(max_extra, extra))
     if extra <= 3:
         return None, ""
-    return extra, f"adaptive headroom profile={profile or 'unknown'}, objective={objective}, extra={extra}"
+    return (
+        extra,
+        f"adaptive headroom profile={profile or 'unknown'}, objective={objective}, extra={extra}",
+    )
 
 
 # Status patch helper
+
 
 def _patch_status(namespace: str, name: str, status_body: dict) -> None:
     """Patch the status subresource of an OrchestratedRollout CR."""
@@ -417,6 +433,7 @@ def on_startup(settings: kopf.OperatorSettings, **_: Any) -> None:
     settings.watching.client_timeout = 300
 
     logger.info("OrchestratedRollout controller started")
+
 
 # Reconciliation handler
 

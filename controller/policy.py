@@ -27,6 +27,7 @@ ACTION_ROLLING = "rolling"
 
 ALL_ACTIONS = [ACTION_DELAY, ACTION_PRE_SCALE, ACTION_CANARY, ACTION_ROLLING]
 
+
 @dataclass
 class FeatureSpec:
     name: str

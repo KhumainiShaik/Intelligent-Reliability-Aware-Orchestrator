@@ -12,8 +12,8 @@ spec:
     kind: Deployment
     name: {{ include "portable-workload.fullname" . }}
   release:
-    image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
-    tag: {{ .Values.workload.version | quote }}
+    image: {{ .Values.image.repository | quote }}
+    tag: {{ .Values.image.tag | quote }}
   actionSet:
     {{- range .Values.orchestratedRollout.actionSet }}
     - {{ . | quote }}

@@ -31,7 +31,9 @@ def _trimmed_mean(values: pd.Series, proportion: float = 0.10) -> float:
     return float(np.mean(values[trim:-trim]))
 
 
-def _bootstrap_ci(values: np.ndarray, rng: np.random.Generator, n: int = 20_000) -> tuple[float, float]:
+def _bootstrap_ci(
+    values: np.ndarray, rng: np.random.Generator, n: int = 20_000
+) -> tuple[float, float]:
     if len(values) == 0:
         return float("nan"), float("nan")
     draws = rng.choice(values, size=(n, len(values)), replace=True).mean(axis=1)
@@ -52,9 +54,28 @@ def load_inputs(reports_dir: Path) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
     return all_trials, trial_metrics, pairwise
 
 
-def validate(all_trials: pd.DataFrame, trial_metrics: pd.DataFrame, pairwise: dict) -> dict[str, object]:
-    required_all = {"mode", "scenario", "fault", "trial", "cost", "p95_ms", "error_rate", "req_rate"}
-    required_metrics = {"mode", "scenario", "fault", "trial", "throughput_rps", "http_p95_ms", "failed_requests"}
+def validate(
+    all_trials: pd.DataFrame, trial_metrics: pd.DataFrame, pairwise: dict
+) -> dict[str, object]:
+    required_all = {
+        "mode",
+        "scenario",
+        "fault",
+        "trial",
+        "cost",
+        "p95_ms",
+        "error_rate",
+        "req_rate",
+    }
+    required_metrics = {
+        "mode",
+        "scenario",
+        "fault",
+        "trial",
+        "throughput_rps",
+        "http_p95_ms",
+        "failed_requests",
+    }
     mode_counts = all_trials.groupby("mode").size().to_dict()
     cell_counts = all_trials.groupby(["scenario", "fault", "trial"]).size()
     summary_means = all_trials.groupby("mode")["cost"].mean().to_dict()
@@ -65,7 +86,9 @@ def validate(all_trials: pd.DataFrame, trial_metrics: pd.DataFrame, pairwise: di
             f"RL v12 Contextual vs {label}",
             f"{label} vs RL v12 Contextual",
         ]
-        key = next((candidate for candidate in candidate_keys if candidate in pairwise), candidate_keys[0])
+        key = next(
+            (candidate for candidate in candidate_keys if candidate in pairwise), candidate_keys[0]
+        )
         if key not in pairwise:
             reproduced[key] = {"found": False}
             continue
@@ -101,14 +124,19 @@ def paired_block(all_trials: pd.DataFrame, reports_dir: Path) -> pd.DataFrame:
     v12 = all_trials[all_trials["mode"] == V12].set_index(["scenario", "fault", "trial"])
     for mode, label in BASELINES.items():
         base = all_trials[all_trials["mode"] == mode].set_index(["scenario", "fault", "trial"])
-        joined = base[["cost"]].rename(columns={"cost": "baseline_cost"}).join(
-            v12[["cost"]].rename(columns={"cost": "v12_cost"}),
-            how="inner",
+        joined = (
+            base[["cost"]]
+            .rename(columns={"cost": "baseline_cost"})
+            .join(
+                v12[["cost"]].rename(columns={"cost": "v12_cost"}),
+                how="inner",
+            )
         )
         diff = (joined["baseline_cost"] - joined["v12_cost"]).to_numpy()
-        nonzero = diff[diff != 0]
         try:
-            wilcoxon_p = float(stats.wilcoxon(diff, alternative="two-sided", zero_method="wilcox").pvalue)
+            wilcoxon_p = float(
+                stats.wilcoxon(diff, alternative="two-sided", zero_method="wilcox").pvalue
+            )
         except ValueError:
             wilcoxon_p = float("nan")
         ci_low, ci_high = _bootstrap_ci(diff, rng)
@@ -121,7 +149,11 @@ def paired_block(all_trials: pd.DataFrame, reports_dir: Path) -> pd.DataFrame:
                 "v12_mean_cost": float(joined["v12_cost"].mean()),
                 "paired_mean_difference_baseline_minus_v12": float(np.mean(diff)),
                 "paired_median_difference_baseline_minus_v12": float(np.median(diff)),
-                "percentage_improvement": float((joined["baseline_cost"].mean() - joined["v12_cost"].mean()) / joined["baseline_cost"].mean() * 100),
+                "percentage_improvement": float(
+                    (joined["baseline_cost"].mean() - joined["v12_cost"].mean())
+                    / joined["baseline_cost"].mean()
+                    * 100
+                ),
                 "v12_win_count": int(np.sum(diff > 0)),
                 "v12_loss_count": int(np.sum(diff < 0)),
                 "tie_count": int(np.sum(diff == 0)),
@@ -136,7 +168,9 @@ def paired_block(all_trials: pd.DataFrame, reports_dir: Path) -> pd.DataFrame:
     return out
 
 
-def robustness(all_trials: pd.DataFrame, reports_dir: Path) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+def robustness(
+    all_trials: pd.DataFrame, reports_dir: Path
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     robust = (
         all_trials.groupby("mode")
         .agg(
@@ -154,20 +188,38 @@ def robustness(all_trials: pd.DataFrame, reports_dir: Path) -> tuple[pd.DataFram
 
     ranks = all_trials.copy()
     ranks["cell"] = ranks["scenario"] + "/" + ranks["fault"] + "/r" + ranks["trial"].astype(str)
-    ranks["cost_rank_in_cell"] = ranks.groupby(["scenario", "fault", "trial"])["cost"].rank(method="min")
+    ranks["cost_rank_in_cell"] = ranks.groupby(["scenario", "fault", "trial"])["cost"].rank(
+        method="min"
+    )
     rank_table = ranks.sort_values(["scenario", "fault", "trial", "cost_rank_in_cell"])[
         ["cell", "scenario", "fault", "trial", "mode", "cost", "cost_rank_in_cell"]
     ]
     rank_table.to_csv(reports_dir / "per_cell_rank_table.csv", index=False)
 
     outliers = all_trials.sort_values("cost", ascending=False).head(5)[
-        ["mode", "scenario", "fault", "trial", "cost", "p95_ms", "error_rate", "req_rate", "slo_breach"]
+        [
+            "mode",
+            "scenario",
+            "fault",
+            "trial",
+            "cost",
+            "p95_ms",
+            "error_rate",
+            "req_rate",
+            "slo_breach",
+        ]
     ]
     outliers.to_csv(reports_dir / "outlier_report.csv", index=False)
     return robust, rank_table, outliers
 
 
-def write_markdown(reports_dir: Path, validation: dict[str, object], paired: pd.DataFrame, robust: pd.DataFrame, outliers: pd.DataFrame) -> None:
+def write_markdown(
+    reports_dir: Path,
+    validation: dict[str, object],
+    paired: pd.DataFrame,
+    robust: pd.DataFrame,
+    outliers: pd.DataFrame,
+) -> None:
     lines = [
         "# Statistical Audit - V12 60-Trial Holdout",
         "",
@@ -191,7 +243,9 @@ def write_markdown(reports_dir: Path, validation: dict[str, object], paired: pd.
         if not item["found"]:
             lines.append(f"| {comparison} | n/a | n/a | n/a |")
         else:
-            lines.append(f"| {comparison} | {item['recorded_p']:.6g} | {item['recomputed_p']:.6g} | {item['delta']:.3g} |")
+            lines.append(
+                f"| {comparison} | {item['recorded_p']:.6g} | {item['recomputed_p']:.6g} | {item['delta']:.3g} |"
+            )
 
     lines += [
         "",
@@ -236,7 +290,9 @@ def write_markdown(reports_dir: Path, validation: dict[str, object], paired: pd.
         )
     else:
         wilcoxon_comparisons = ", ".join(wilcoxon_significant["comparison"].tolist()) or "none"
-        permutation_comparisons = ", ".join(permutation_significant["comparison"].tolist()) or "none"
+        permutation_comparisons = (
+            ", ".join(permutation_significant["comparison"].tolist()) or "none"
+        )
         lines.append(
             "The conservative unpaired Mann-Whitney tests did not reach significance, but the paired blocked analysis "
             f"showed Wilcoxon significance for: {wilcoxon_comparisons}. "
@@ -283,7 +339,9 @@ def write_markdown(reports_dir: Path, validation: dict[str, object], paired: pd.
     paired_md += [
         "",
     ]
-    (reports_dir / "paired_block_statistical_tests.md").write_text("\n".join(paired_md), encoding="utf-8")
+    (reports_dir / "paired_block_statistical_tests.md").write_text(
+        "\n".join(paired_md), encoding="utf-8"
+    )
 
 
 def main() -> None:

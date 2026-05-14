@@ -18,11 +18,14 @@ import argparse
 import json
 import math
 from pathlib import Path
-from typing import Any, Callable
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pandas as pd
 from scipy import stats
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 SLO_P95_LATENCY_MS = 100.0
 SLO_ERROR_RATE = 0.01
@@ -108,7 +111,9 @@ def _load_trials(results_dir: Path) -> pd.DataFrame:
                 "inference_p95_ms": inference_p95,
                 "slo_breach": 1.0 if slo_breach else 0.0,
                 "throughput_rps": _safe_float(data.get("throughput_rps")),
-                "failed_request_rate": (failed_requests / request_count) if request_count > 0 else 0.0,
+                "failed_request_rate": (failed_requests / request_count)
+                if request_count > 0
+                else 0.0,
                 "failed_requests": failed_requests,
                 "request_count": request_count,
                 "error_rate": http_error_rate,
@@ -177,7 +182,7 @@ def _breakdown(df: pd.DataFrame, key: str) -> pd.DataFrame:
         for policy in policies:
             subset = group[group["policy"] == policy]
             prefix = policy.lower().replace("/", "_").replace(" ", "_").replace("-", "_")
-            row[f"{prefix}_trials"] = int(len(subset))
+            row[f"{prefix}_trials"] = len(subset)
             row[f"{prefix}_cost_mean"] = subset["corrected_cost"].mean()
             row[f"{prefix}_inference_p95_mean"] = subset["inference_p95_ms"].mean()
             row[f"{prefix}_http_p95_mean"] = subset["http_p95_ms"].mean()

@@ -17,10 +17,15 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
+    "matplotlib>=3.8",
+    "numpy>=1.26",
+    "pandas>=2.0",
     "pytest>=8.0",
     "pytest-cov>=5.0",
     "pytest-asyncio>=0.23",
+    "PyYAML>=6.0",
     "ruff>=0.4",
+    "scipy>=1.11",
     "mypy>=1.10",
     "types-requests>=2.31",
 ]

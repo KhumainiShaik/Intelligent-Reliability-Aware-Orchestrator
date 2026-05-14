@@ -5,6 +5,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
+import controller.reconciler as reconciler
 from controller.reconciler import (
     ACTION_CANARY,
     ACTION_DELAY,
@@ -21,7 +22,6 @@ from controller.reconciler import (
     _v12_contextual_decision,
     reconcile,
 )
-import controller.reconciler as reconciler
 from controller.snapshot import DecisionSnapshot
 
 

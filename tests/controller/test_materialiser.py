@@ -48,7 +48,9 @@ class TestMaterialiser:
         apps_api.return_value = MagicMock()
         mat = Materialiser(api_client=None)
         mat._resolve_selector_labels = MagicMock(return_value={"app": "workload"})
-        mat._resolve_container_spec = MagicMock(return_value={"name": "workload", "image": "repo:v2"})
+        mat._resolve_container_spec = MagicMock(
+            return_value={"name": "workload", "image": "repo:v2"}
+        )
 
         rollout = mat._build_rollout(
             {
@@ -66,9 +68,10 @@ class TestMaterialiser:
         )
 
         assert rollout["spec"]["replicas"] == 7
-        assert rollout["metadata"]["annotations"][
-            "orchestrated-rollout.io/pre-scale-extra-replicas"
-        ] == "3"
+        assert (
+            rollout["metadata"]["annotations"]["orchestrated-rollout.io/pre-scale-extra-replicas"]
+            == "3"
+        )
 
     @patch("controller.materialiser.k8s_client.AppsV1Api")
     @patch("controller.materialiser.k8s_client.CustomObjectsApi")
@@ -80,7 +83,9 @@ class TestMaterialiser:
         apps_api.return_value = MagicMock()
         mat = Materialiser(api_client=None)
         mat._resolve_selector_labels = MagicMock(return_value={"app": "workload"})
-        mat._resolve_container_spec = MagicMock(return_value={"name": "workload", "image": "repo:v2"})
+        mat._resolve_container_spec = MagicMock(
+            return_value={"name": "workload", "image": "repo:v2"}
+        )
 
         rollout = mat._build_rollout(
             {
@@ -101,9 +106,10 @@ class TestMaterialiser:
         )
 
         assert rollout["spec"]["replicas"] == 7
-        assert rollout["metadata"]["annotations"][
-            "orchestrated-rollout.io/pre-scale-extra-replicas"
-        ] == "3"
+        assert (
+            rollout["metadata"]["annotations"]["orchestrated-rollout.io/pre-scale-extra-replicas"]
+            == "3"
+        )
 
     @patch("controller.materialiser.k8s_client.AppsV1Api")
     @patch("controller.materialiser.k8s_client.CustomObjectsApi")
@@ -115,7 +121,9 @@ class TestMaterialiser:
         apps_api.return_value = MagicMock()
         mat = Materialiser(api_client=None)
         mat._resolve_selector_labels = MagicMock(return_value={"app": "workload"})
-        mat._resolve_container_spec = MagicMock(return_value={"name": "workload", "image": "repo:v2"})
+        mat._resolve_container_spec = MagicMock(
+            return_value={"name": "workload", "image": "repo:v2"}
+        )
 
         rollout = mat._build_rollout(
             {
@@ -134,9 +142,10 @@ class TestMaterialiser:
         )
 
         assert rollout["spec"]["replicas"] == 9
-        assert rollout["metadata"]["annotations"][
-            "orchestrated-rollout.io/pre-scale-extra-replicas"
-        ] == "5"
+        assert (
+            rollout["metadata"]["annotations"]["orchestrated-rollout.io/pre-scale-extra-replicas"]
+            == "5"
+        )
 
     @patch("controller.materialiser.k8s_client.AppsV1Api")
     @patch("controller.materialiser.k8s_client.CustomObjectsApi")
@@ -148,7 +157,9 @@ class TestMaterialiser:
         apps_api.return_value = MagicMock()
         mat = Materialiser(api_client=None)
         mat._resolve_selector_labels = MagicMock(return_value={"app": "workload"})
-        mat._resolve_container_spec = MagicMock(return_value={"name": "workload", "image": "repo:v2"})
+        mat._resolve_container_spec = MagicMock(
+            return_value={"name": "workload", "image": "repo:v2"}
+        )
 
         rollout = mat._build_rollout(
             {
@@ -170,7 +181,9 @@ class TestMaterialiser:
 
     @patch("controller.materialiser.k8s_client.AppsV1Api")
     @patch("controller.materialiser.k8s_client.CustomObjectsApi")
-    def test_apply_creates_rollout_when_absent(self, dyn_api: MagicMock, apps_api: MagicMock) -> None:
+    def test_apply_creates_rollout_when_absent(
+        self, dyn_api: MagicMock, apps_api: MagicMock
+    ) -> None:
         dyn = MagicMock()
         dyn_api.return_value = dyn
         apps_api.return_value = MagicMock()
@@ -192,7 +205,9 @@ class TestMaterialiser:
 
     @patch("controller.materialiser.k8s_client.AppsV1Api")
     @patch("controller.materialiser.k8s_client.CustomObjectsApi")
-    def test_apply_patches_when_rollout_exists(self, dyn_api: MagicMock, apps_api: MagicMock) -> None:
+    def test_apply_patches_when_rollout_exists(
+        self, dyn_api: MagicMock, apps_api: MagicMock
+    ) -> None:
         dyn = MagicMock()
         dyn_api.return_value = dyn
         apps_api.return_value = MagicMock()

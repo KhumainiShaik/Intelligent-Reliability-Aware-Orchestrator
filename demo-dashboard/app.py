@@ -21,7 +21,7 @@ APP_TITLE = "Adaptive Deployment Orchestration Demo"
 CRD_GROUP = os.getenv("OROLL_GROUP", "rollout.orchestrated.io")
 CRD_VERSION = os.getenv("OROLL_VERSION", "v1alpha1")
 CRD_PLURAL = os.getenv("OROLL_PLURAL", "orchestratedrollouts")
-PROMETHEUS_URL = os.getenv("PROMETHEUS_URL", "http://prometheus-server.monitoring.svc.cluster.local")
+PROMETHEUS_URL = os.getenv("PROMETHEUS_URL", "http://prometheus.monitoring.svc.cluster.local:9090")
 ARGO_NAMESPACE = os.getenv("ARGO_NAMESPACE", "argocd")
 DEFAULT_NAMESPACES = os.getenv(
     "DEMO_NAMESPACES",
@@ -89,7 +89,13 @@ def _latest_rollout() -> Dict[str, Any]:
             continue
     if not items:
         return {"available": False, "message": "No OrchestratedRollout objects found in demo namespaces"}
-    items.sort(key=lambda obj: _parse_ts(_safe_get(obj, ["metadata", "creationTimestamp"])), reverse=True)
+    items.sort(
+        key=lambda obj: (
+            _parse_ts(_safe_get(obj, ["status", "decisionTimestamp"])),
+            _parse_ts(_safe_get(obj, ["metadata", "creationTimestamp"])),
+        ),
+        reverse=True,
+    )
     obj = items[0]
     spec = obj.get("spec", {}) or {}
     status = obj.get("status", {}) or {}
@@ -106,6 +112,7 @@ def _latest_rollout() -> Dict[str, Any]:
         "namespace": obj.get("_namespace"),
         "name": _safe_get(obj, ["metadata", "name"], "unknown"),
         "created": _safe_get(obj, ["metadata", "creationTimestamp"]),
+        "decisionTimestamp": status.get("decisionTimestamp"),
         "targetName": target.get("name", "unknown"),
         "releaseImage": release.get("image", "unknown"),
         "releaseTag": release.get("tag", "unknown"),
@@ -212,9 +219,18 @@ def _prometheus_metrics(namespace: Optional[str], target_name: Optional[str]) ->
     if not namespace or not target_name:
         return {"available": False}
     queries = {
-        "p95LatencySeconds": f'histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{{namespace="{namespace}",app="{target_name}"}}[2m])) by (le))',
-        "throughputRps": f'sum(rate(requests_total{{namespace="{namespace}",app="{target_name}"}}[2m]))',
-        "failuresRps": f'sum(rate(request_failures_total{{namespace="{namespace}",app="{target_name}"}}[2m]))',
+        "p95LatencySeconds": (
+            f'histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket'
+            f'{{kubernetes_namespace="{namespace}",kubernetes_pod_name=~"{target_name}.*"}}[2m])) by (le))'
+        ),
+        "throughputRps": (
+            f'sum(rate(requests_total{{kubernetes_namespace="{namespace}",'
+            f'kubernetes_pod_name=~"{target_name}.*"}}[2m]))'
+        ),
+        "failuresRps": (
+            f'sum(rate(request_failures_total{{kubernetes_namespace="{namespace}",'
+            f'kubernetes_pod_name=~"{target_name}.*"}}[2m]))'
+        ),
     }
     output: Dict[str, Any] = {"available": True}
     for name, query in queries.items():

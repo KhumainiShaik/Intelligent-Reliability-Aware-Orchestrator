@@ -60,7 +60,9 @@ def _mix(values: pd.Series) -> str:
 
 def _load_trial_rows(experiments_dir: Path) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
-    for metrics_path in sorted(experiments_dir.glob("grid_*_shard*-of-*/*/reports/trial_*_metrics.json")):
+    for metrics_path in sorted(
+        experiments_dir.glob("grid_*_shard*-of-*/*/reports/trial_*_metrics.json")
+    ):
         shard_dir = metrics_path.parents[2]
         mode = _mode_from_shard(shard_dir.name)
         try:
@@ -73,37 +75,40 @@ def _load_trial_rows(experiments_dir: Path) -> list[dict[str, Any]]:
         request_count = _safe_float(data.get("request_count"))
         failed_requests = _safe_float(data.get("failed_requests")) or 0.0
 
-        rows.append({
-            "mode": mode,
-            "label": MODE_LABELS.get(mode, mode),
-            "shard": shard_dir.name,
-            "scenario": data.get("scenario"),
-            "fault": data.get("fault"),
-            "trial": data.get("trial"),
-            "phase": data.get("phase"),
-            "strategy": data.get("strategy"),
-            "policy_version": data.get("policy_version"),
-            "pre_scale_extra_replicas": _safe_float(data.get("pre_scale_extra_replicas")),
-            "stress_score": _safe_float(data.get("stress_score")),
-            "rollout_seconds": _safe_float(data.get("rollout_seconds")),
-            "k6_wall_seconds": _safe_float(data.get("k6_wall_seconds")),
-            "trial_seconds": _safe_float(data.get("trial_seconds")),
-            "reset_seconds": _safe_float(data.get("reset_seconds")),
-            "model_load_seconds": _safe_float(data.get("model_load_seconds")),
-            "request_count": request_count,
-            "failed_requests": failed_requests,
-            "failed_request_pct": (failed_requests / request_count * 100.0)
-            if request_count and request_count > 0
-            else None,
-            "http_error_rate_pct": (_safe_float(data.get("http_error_rate")) or 0.0) * 100.0,
-            "custom_error_rate_pct": (_safe_float(data.get("custom_error_rate")) or 0.0) * 100.0,
-            "throughput_rps": _safe_float(data.get("throughput_rps")),
-            "http_p95_ms": _safe_float(http_latency.get("p95_ms")),
-            "http_p99_ms": _safe_float(http_latency.get("p99_ms")),
-            "inference_p95_ms": _safe_float(inference_latency.get("p95_ms")),
-            "inference_p99_ms": _safe_float(inference_latency.get("p99_ms")),
-            "chaos_verdict": data.get("chaos_verdict"),
-        })
+        rows.append(
+            {
+                "mode": mode,
+                "label": MODE_LABELS.get(mode, mode),
+                "shard": shard_dir.name,
+                "scenario": data.get("scenario"),
+                "fault": data.get("fault"),
+                "trial": data.get("trial"),
+                "phase": data.get("phase"),
+                "strategy": data.get("strategy"),
+                "policy_version": data.get("policy_version"),
+                "pre_scale_extra_replicas": _safe_float(data.get("pre_scale_extra_replicas")),
+                "stress_score": _safe_float(data.get("stress_score")),
+                "rollout_seconds": _safe_float(data.get("rollout_seconds")),
+                "k6_wall_seconds": _safe_float(data.get("k6_wall_seconds")),
+                "trial_seconds": _safe_float(data.get("trial_seconds")),
+                "reset_seconds": _safe_float(data.get("reset_seconds")),
+                "model_load_seconds": _safe_float(data.get("model_load_seconds")),
+                "request_count": request_count,
+                "failed_requests": failed_requests,
+                "failed_request_pct": (failed_requests / request_count * 100.0)
+                if request_count and request_count > 0
+                else None,
+                "http_error_rate_pct": (_safe_float(data.get("http_error_rate")) or 0.0) * 100.0,
+                "custom_error_rate_pct": (_safe_float(data.get("custom_error_rate")) or 0.0)
+                * 100.0,
+                "throughput_rps": _safe_float(data.get("throughput_rps")),
+                "http_p95_ms": _safe_float(http_latency.get("p95_ms")),
+                "http_p99_ms": _safe_float(http_latency.get("p99_ms")),
+                "inference_p95_ms": _safe_float(inference_latency.get("p95_ms")),
+                "inference_p99_ms": _safe_float(inference_latency.get("p99_ms")),
+                "chaos_verdict": data.get("chaos_verdict"),
+            }
+        )
     return rows
 
 
@@ -112,32 +117,34 @@ def _summarise(df: pd.DataFrame) -> pd.DataFrame:
     for (mode, label), group in df.groupby(["mode", "label"], dropna=False):
         request_total = float(group["request_count"].fillna(0).sum())
         failed_total = float(group["failed_requests"].fillna(0).sum())
-        rows.append({
-            "mode": mode,
-            "label": label,
-            "trials": int(len(group)),
-            "completed_trials": int((group["phase"] == "Completed").sum()),
-            "strategy_mix": _mix(group["strategy"]),
-            "policy_versions": _mix(group["policy_version"]),
-            "pre_scale_extra_mix": _mix(group["pre_scale_extra_replicas"]),
-            "chaos_verdicts": _mix(group["chaos_verdict"]),
-            "total_requests": request_total,
-            "failed_requests": failed_total,
-            "failed_request_pct": (failed_total / request_total * 100.0)
-            if request_total > 0
-            else None,
-            "mean_http_error_rate_pct": group["http_error_rate_pct"].mean(),
-            "mean_throughput_rps": group["throughput_rps"].mean(),
-            "mean_rollout_seconds": group["rollout_seconds"].mean(),
-            "mean_k6_wall_seconds": group["k6_wall_seconds"].mean(),
-            "mean_trial_seconds": group["trial_seconds"].mean(),
-            "mean_reset_seconds": group["reset_seconds"].mean(),
-            "mean_model_load_seconds": group["model_load_seconds"].dropna().mean(),
-            "mean_http_p95_ms": group["http_p95_ms"].mean(),
-            "mean_http_p99_ms": group["http_p99_ms"].mean(),
-            "mean_inference_p95_ms": group["inference_p95_ms"].mean(),
-            "mean_inference_p99_ms": group["inference_p99_ms"].mean(),
-        })
+        rows.append(
+            {
+                "mode": mode,
+                "label": label,
+                "trials": len(group),
+                "completed_trials": int((group["phase"] == "Completed").sum()),
+                "strategy_mix": _mix(group["strategy"]),
+                "policy_versions": _mix(group["policy_version"]),
+                "pre_scale_extra_mix": _mix(group["pre_scale_extra_replicas"]),
+                "chaos_verdicts": _mix(group["chaos_verdict"]),
+                "total_requests": request_total,
+                "failed_requests": failed_total,
+                "failed_request_pct": (failed_total / request_total * 100.0)
+                if request_total > 0
+                else None,
+                "mean_http_error_rate_pct": group["http_error_rate_pct"].mean(),
+                "mean_throughput_rps": group["throughput_rps"].mean(),
+                "mean_rollout_seconds": group["rollout_seconds"].mean(),
+                "mean_k6_wall_seconds": group["k6_wall_seconds"].mean(),
+                "mean_trial_seconds": group["trial_seconds"].mean(),
+                "mean_reset_seconds": group["reset_seconds"].mean(),
+                "mean_model_load_seconds": group["model_load_seconds"].dropna().mean(),
+                "mean_http_p95_ms": group["http_p95_ms"].mean(),
+                "mean_http_p99_ms": group["http_p99_ms"].mean(),
+                "mean_inference_p95_ms": group["inference_p95_ms"].mean(),
+                "mean_inference_p99_ms": group["inference_p99_ms"].mean(),
+            }
+        )
     return pd.DataFrame(rows).sort_values(["mode"]).reset_index(drop=True)
 
 

@@ -78,6 +78,9 @@ jobs:
       - name: Lint monitoring chart
         run: helm lint charts/monitoring/
 
+      - name: Lint portable workload chart
+        run: helm lint charts/portable-workload/
+
       - name: Template controller chart
         run: helm template test charts/controller/ > /dev/null
 
@@ -86,6 +89,9 @@ jobs:
 
       - name: Template monitoring chart
         run: helm template test charts/monitoring/ > /dev/null
+
+      - name: Template portable workload chart
+        run: helm template test charts/portable-workload/ > /dev/null
 
   # ── Go build (workload) ─────────────────────────────────────
   go-build:

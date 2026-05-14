@@ -82,24 +82,27 @@ MODE_COLORS = {
     "baseline-rule-based": "#FF9800",
 }
 
-plt.rcParams.update({
-    "font.size": 11,
-    "font.family": "serif",
-    "axes.labelsize": 12,
-    "axes.titlesize": 13,
-    "xtick.labelsize": 10,
-    "ytick.labelsize": 10,
-    "legend.fontsize": 10,
-    "figure.figsize": (10, 6),
-    "figure.dpi": 300,
-    "savefig.dpi": 300,
-    "savefig.bbox": "tight",
-})
+plt.rcParams.update(
+    {
+        "font.size": 11,
+        "font.family": "serif",
+        "axes.labelsize": 12,
+        "axes.titlesize": 13,
+        "xtick.labelsize": 10,
+        "ytick.labelsize": 10,
+        "legend.fontsize": 10,
+        "figure.figsize": (10, 6),
+        "figure.dpi": 300,
+        "savefig.dpi": 300,
+        "savefig.bbox": "tight",
+    }
+)
 
 
 # ---------------------------------------------------------------------------
 # Data loading
 # ---------------------------------------------------------------------------
+
 
 def _safe_float(v) -> float | None:
     if v is None:
@@ -161,7 +164,9 @@ def parse_k6_summary(path: Path) -> dict | None:
     req_count = _safe_float(reqs_v.get("count")) or 0.0
     req_rate = _safe_float(reqs_v.get("rate")) or 0.0
 
-    slo_breach = (p95 is not None and p95 > SLO_P95_LATENCY_MS) or (error_rate is not None and error_rate > SLO_ERROR_RATE)
+    slo_breach = (p95 is not None and p95 > SLO_P95_LATENCY_MS) or (
+        error_rate is not None and error_rate > SLO_ERROR_RATE
+    )
 
     # Composite cost: include error magnitude, not only a binary breach flag.
     # Without this term, a trial with severe failed-request rate can look
@@ -208,8 +213,7 @@ def _trial_summary_count(shard_dirs: list[Path]) -> int:
 
 def _find_mode_shard_dirs(experiments_dir: Path, mode: str) -> list[Path]:
     candidates = sorted(
-        d for d in experiments_dir.iterdir()
-        if d.is_dir() and f"_{mode}_shard" in d.name
+        d for d in experiments_dir.iterdir() if d.is_dir() and f"_{mode}_shard" in d.name
     )
     if not candidates:
         return []
@@ -263,15 +267,17 @@ def load_all_trials(experiments_dir: Path) -> pd.DataFrame:
                         logger.warning("Skipping %s (parse failed)", summary_file)
                         continue
 
-                    rows.append({
-                        "mode": mode,
-                        "scenario": scenario,
-                        "fault": fault,
-                        "combo": combo_name,
-                        "trial": trial_num,
-                        "shard": shard_dir.name,
-                        **parsed,
-                    })
+                    rows.append(
+                        {
+                            "mode": mode,
+                            "scenario": scenario,
+                            "fault": fault,
+                            "combo": combo_name,
+                            "trial": trial_num,
+                            "shard": shard_dir.name,
+                            **parsed,
+                        }
+                    )
 
     df = pd.DataFrame(rows)
     logger.info("Loaded %d trial records across %d modes", len(df), df["mode"].nunique())
@@ -282,6 +288,7 @@ def load_all_trials(experiments_dir: Path) -> pd.DataFrame:
 # Statistics
 # ---------------------------------------------------------------------------
 
+
 def bootstrap_ci(data, stat_fn=np.mean, n_boot=10_000, ci=0.95, seed=42):
     rng = np.random.default_rng(seed)
     arr = np.asarray(data, dtype=float)
@@ -290,7 +297,11 @@ def bootstrap_ci(data, stat_fn=np.mean, n_boot=10_000, ci=0.95, seed=42):
         return np.nan, np.nan, np.nan
     boots = np.array([stat_fn(rng.choice(arr, size=len(arr), replace=True)) for _ in range(n_boot)])
     alpha = (1 - ci) / 2
-    return float(stat_fn(arr)), float(np.percentile(boots, alpha * 100)), float(np.percentile(boots, (1 - alpha) * 100))
+    return (
+        float(stat_fn(arr)),
+        float(np.percentile(boots, alpha * 100)),
+        float(np.percentile(boots, (1 - alpha) * 100)),
+    )
 
 
 def mann_whitney(a, b):
@@ -308,6 +319,7 @@ def mann_whitney(a, b):
 # ---------------------------------------------------------------------------
 # Report generation
 # ---------------------------------------------------------------------------
+
 
 def generate_report(df: pd.DataFrame, output_dir: Path):
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -329,7 +341,12 @@ def generate_report(df: pd.DataFrame, output_dir: Path):
 
     summary_df = pd.DataFrame(summary_rows)
     summary_df.to_csv(output_dir / "mode_summary.csv", index=False)
-    logger.info("Mode summary:\n%s", summary_df[["label", "n_trials", "p95_ms_mean", "error_rate_mean", "cost_mean", "slo_breach_pct"]].to_string(index=False))
+    logger.info(
+        "Mode summary:\n%s",
+        summary_df[
+            ["label", "n_trials", "p95_ms_mean", "error_rate_mean", "cost_mean", "slo_breach_pct"]
+        ].to_string(index=False),
+    )
 
     # ---- 2. Per-combo breakdown ----
     combo_rows = []
@@ -348,7 +365,7 @@ def generate_report(df: pd.DataFrame, output_dir: Path):
     pairwise = {}
     for metric in ("p95_ms", "error_rate", "cost"):
         for i, m1 in enumerate(modes):
-            for m2 in modes[i + 1:]:
+            for m2 in modes[i + 1 :]:
                 a = df[df["mode"] == m1][metric].dropna().values
                 b = df[df["mode"] == m2][metric].dropna().values
                 key = f"{MODE_LABELS[m1]} vs {MODE_LABELS[m2]}"
@@ -368,23 +385,31 @@ def generate_report(df: pd.DataFrame, output_dir: Path):
     logger.info("\nPairwise Mann-Whitney U (cost):")
     for pair, metrics_dict in pairwise.items():
         c = metrics_dict.get("cost", {})
-        logger.info("  %s: mean=%.4f vs %.4f, p=%.4f %s (r=%.3f)",
-                     pair, c.get("mean_a", 0), c.get("mean_b", 0),
-                     c.get("p", 1), c.get("sig", ""), c.get("r", 0))
+        logger.info(
+            "  %s: mean=%.4f vs %.4f, p=%.4f %s (r=%.3f)",
+            pair,
+            c.get("mean_a", 0),
+            c.get("mean_b", 0),
+            c.get("p", 1),
+            c.get("sig", ""),
+            c.get("r", 0),
+        )
 
     # ---- 4. Per-scenario×fault heatmap data ----
     scenario_rows = []
     for (scenario, fault, mode), gdf in df.groupby(["scenario", "fault", "mode"]):
-        scenario_rows.append({
-            "scenario": scenario,
-            "fault": fault,
-            "mode": mode,
-            "label": MODE_LABELS[mode],
-            "p95_ms_mean": gdf["p95_ms"].mean(),
-            "error_rate_mean": gdf["error_rate"].mean(),
-            "cost_mean": gdf["cost"].mean(),
-            "slo_breach_pct": float(gdf["slo_breach"].mean()) * 100,
-        })
+        scenario_rows.append(
+            {
+                "scenario": scenario,
+                "fault": fault,
+                "mode": mode,
+                "label": MODE_LABELS[mode],
+                "p95_ms_mean": gdf["p95_ms"].mean(),
+                "error_rate_mean": gdf["error_rate"].mean(),
+                "cost_mean": gdf["cost"].mean(),
+                "slo_breach_pct": float(gdf["slo_breach"].mean()) * 100,
+            }
+        )
     scenario_df = pd.DataFrame(scenario_rows)
     scenario_df.to_csv(output_dir / "scenario_breakdown.csv", index=False)
 
@@ -398,7 +423,10 @@ def generate_report(df: pd.DataFrame, output_dir: Path):
 # Plots
 # ---------------------------------------------------------------------------
 
-def generate_plots(df: pd.DataFrame, summary_df: pd.DataFrame, scenario_df: pd.DataFrame, output_dir: Path):
+
+def generate_plots(
+    df: pd.DataFrame, summary_df: pd.DataFrame, scenario_df: pd.DataFrame, output_dir: Path
+):
     plots_dir = output_dir / "plots"
     plots_dir.mkdir(exist_ok=True)
     modes_ordered = [m for m in MODE_SHARD_OF if m in df["mode"].values]
@@ -409,33 +437,72 @@ def generate_plots(df: pd.DataFrame, summary_df: pd.DataFrame, scenario_df: pd.D
     means = [summary_df[summary_df["mode"] == m]["cost_mean"].values[0] for m in modes_ordered]
     ci_lo = [summary_df[summary_df["mode"] == m]["cost_ci_lo"].values[0] for m in modes_ordered]
     ci_hi = [summary_df[summary_df["mode"] == m]["cost_ci_hi"].values[0] for m in modes_ordered]
-    errors = np.array([[m - lo for m, lo in zip(means, ci_lo)],
-                       [hi - m for m, hi in zip(means, ci_hi)]])
+    errors = np.array(
+        [[m - lo for m, lo in zip(means, ci_lo)], [hi - m for m, hi in zip(means, ci_hi)]]
+    )
     colors = [MODE_COLORS[m] for m in modes_ordered]
-    bars = ax.bar(range(len(labels)), means, yerr=errors, capsize=5, color=colors,
-                  edgecolor="black", linewidth=0.5, alpha=0.85)
+    bars = ax.bar(
+        range(len(labels)),
+        means,
+        yerr=errors,
+        capsize=5,
+        color=colors,
+        edgecolor="black",
+        linewidth=0.5,
+        alpha=0.85,
+    )
     ax.set_xticks(range(len(labels)))
     ax.set_xticklabels(labels, rotation=20, ha="right")
     ax.set_ylabel("Composite Cost")
     ax.set_title("Mean Rollout Cost by Mode (95% CI)")
     ax.grid(axis="y", alpha=0.3)
     for bar, val in zip(bars, means):
-        ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.01, f"{val:.3f}",
-                ha="center", va="bottom", fontsize=9)
+        ax.text(
+            bar.get_x() + bar.get_width() / 2,
+            bar.get_height() + 0.01,
+            f"{val:.3f}",
+            ha="center",
+            va="bottom",
+            fontsize=9,
+        )
     plt.tight_layout()
     fig.savefig(plots_dir / "cost_comparison.png")
     plt.close(fig)
 
     # ---- 2. P95 latency comparison ----
     fig, ax = plt.subplots(figsize=(10, 6))
-    means_lat = [summary_df[summary_df["mode"] == m]["p95_ms_mean"].values[0] for m in modes_ordered]
-    ci_lo_lat = [summary_df[summary_df["mode"] == m]["p95_ms_ci_lo"].values[0] for m in modes_ordered]
-    ci_hi_lat = [summary_df[summary_df["mode"] == m]["p95_ms_ci_hi"].values[0] for m in modes_ordered]
-    errors_lat = np.array([[m - lo for m, lo in zip(means_lat, ci_lo_lat)],
-                           [hi - m for m, hi in zip(means_lat, ci_hi_lat)]])
-    ax.bar(range(len(labels)), means_lat, yerr=errors_lat, capsize=5, color=colors,
-           edgecolor="black", linewidth=0.5, alpha=0.85)
-    ax.axhline(y=SLO_P95_LATENCY_MS, color="red", linestyle="--", linewidth=1, label=f"SLO = {SLO_P95_LATENCY_MS} ms")
+    means_lat = [
+        summary_df[summary_df["mode"] == m]["p95_ms_mean"].values[0] for m in modes_ordered
+    ]
+    ci_lo_lat = [
+        summary_df[summary_df["mode"] == m]["p95_ms_ci_lo"].values[0] for m in modes_ordered
+    ]
+    ci_hi_lat = [
+        summary_df[summary_df["mode"] == m]["p95_ms_ci_hi"].values[0] for m in modes_ordered
+    ]
+    errors_lat = np.array(
+        [
+            [m - lo for m, lo in zip(means_lat, ci_lo_lat)],
+            [hi - m for m, hi in zip(means_lat, ci_hi_lat)],
+        ]
+    )
+    ax.bar(
+        range(len(labels)),
+        means_lat,
+        yerr=errors_lat,
+        capsize=5,
+        color=colors,
+        edgecolor="black",
+        linewidth=0.5,
+        alpha=0.85,
+    )
+    ax.axhline(
+        y=SLO_P95_LATENCY_MS,
+        color="red",
+        linestyle="--",
+        linewidth=1,
+        label=f"SLO = {SLO_P95_LATENCY_MS} ms",
+    )
     ax.set_xticks(range(len(labels)))
     ax.set_xticklabels(labels, rotation=20, ha="right")
     ax.set_ylabel("P95 Latency (ms)")
@@ -448,14 +515,41 @@ def generate_plots(df: pd.DataFrame, summary_df: pd.DataFrame, scenario_df: pd.D
 
     # ---- 3. Error rate comparison ----
     fig, ax = plt.subplots(figsize=(10, 6))
-    means_err = [summary_df[summary_df["mode"] == m]["error_rate_mean"].values[0] * 100 for m in modes_ordered]
-    ci_lo_err = [summary_df[summary_df["mode"] == m]["error_rate_ci_lo"].values[0] * 100 for m in modes_ordered]
-    ci_hi_err = [summary_df[summary_df["mode"] == m]["error_rate_ci_hi"].values[0] * 100 for m in modes_ordered]
-    errors_err = np.array([[m - lo for m, lo in zip(means_err, ci_lo_err)],
-                           [hi - m for m, hi in zip(means_err, ci_hi_err)]])
-    ax.bar(range(len(labels)), means_err, yerr=errors_err, capsize=5, color=colors,
-           edgecolor="black", linewidth=0.5, alpha=0.85)
-    ax.axhline(y=SLO_ERROR_RATE * 100, color="red", linestyle="--", linewidth=1, label=f"SLO = {SLO_ERROR_RATE * 100:.1f}%")
+    means_err = [
+        summary_df[summary_df["mode"] == m]["error_rate_mean"].values[0] * 100
+        for m in modes_ordered
+    ]
+    ci_lo_err = [
+        summary_df[summary_df["mode"] == m]["error_rate_ci_lo"].values[0] * 100
+        for m in modes_ordered
+    ]
+    ci_hi_err = [
+        summary_df[summary_df["mode"] == m]["error_rate_ci_hi"].values[0] * 100
+        for m in modes_ordered
+    ]
+    errors_err = np.array(
+        [
+            [m - lo for m, lo in zip(means_err, ci_lo_err)],
+            [hi - m for m, hi in zip(means_err, ci_hi_err)],
+        ]
+    )
+    ax.bar(
+        range(len(labels)),
+        means_err,
+        yerr=errors_err,
+        capsize=5,
+        color=colors,
+        edgecolor="black",
+        linewidth=0.5,
+        alpha=0.85,
+    )
+    ax.axhline(
+        y=SLO_ERROR_RATE * 100,
+        color="red",
+        linestyle="--",
+        linewidth=1,
+        label=f"SLO = {SLO_ERROR_RATE * 100:.1f}%",
+    )
     ax.set_xticks(range(len(labels)))
     ax.set_xticklabels(labels, rotation=20, ha="right")
     ax.set_ylabel("Error Rate (%)")
@@ -468,8 +562,12 @@ def generate_plots(df: pd.DataFrame, summary_df: pd.DataFrame, scenario_df: pd.D
 
     # ---- 4. SLO breach percentage ----
     fig, ax = plt.subplots(figsize=(10, 6))
-    breach_pcts = [summary_df[summary_df["mode"] == m]["slo_breach_pct"].values[0] for m in modes_ordered]
-    ax.bar(range(len(labels)), breach_pcts, color=colors, edgecolor="black", linewidth=0.5, alpha=0.85)
+    breach_pcts = [
+        summary_df[summary_df["mode"] == m]["slo_breach_pct"].values[0] for m in modes_ordered
+    ]
+    ax.bar(
+        range(len(labels)), breach_pcts, color=colors, edgecolor="black", linewidth=0.5, alpha=0.85
+    )
     ax.set_xticks(range(len(labels)))
     ax.set_xticklabels(labels, rotation=20, ha="right")
     ax.set_ylabel("SLO Breach Rate (%)")
@@ -490,7 +588,13 @@ def generate_plots(df: pd.DataFrame, summary_df: pd.DataFrame, scenario_df: pd.D
         patch.set_facecolor(MODE_COLORS[m])
         patch.set_alpha(0.7)
     ax.set_xticklabels(labels, rotation=20, ha="right")
-    ax.axhline(y=SLO_P95_LATENCY_MS, color="red", linestyle="--", linewidth=1, label=f"SLO = {SLO_P95_LATENCY_MS} ms")
+    ax.axhline(
+        y=SLO_P95_LATENCY_MS,
+        color="red",
+        linestyle="--",
+        linewidth=1,
+        label=f"SLO = {SLO_P95_LATENCY_MS} ms",
+    )
     ax.set_ylabel("P95 Latency (ms)")
     ax.set_title("P95 Latency Distribution by Mode")
     ax.legend()
@@ -557,8 +661,15 @@ def generate_plots(df: pd.DataFrame, summary_df: pd.DataFrame, scenario_df: pd.D
             for fi in range(len(faults)):
                 val = matrix[si, fi]
                 if not np.isnan(val):
-                    ax.text(fi, si, f"{val:.0f}%", ha="center", va="center", fontsize=9,
-                            color="white" if val > 50 else "black")
+                    ax.text(
+                        fi,
+                        si,
+                        f"{val:.0f}%",
+                        ha="center",
+                        va="center",
+                        fontsize=9,
+                        color="white" if val > 50 else "black",
+                    )
     fig.colorbar(im, ax=axes, shrink=0.6, label="Breach %")
     plt.suptitle("SLO Breach Heatmap: " + " vs ".join(MODE_LABELS[m] for m in heatmap_modes))
     plt.tight_layout()
@@ -579,14 +690,16 @@ def _generate_summary_table(summary_df: pd.DataFrame, output_path: Path):
     headers = ["Mode", "N", "P95 (ms)", "Error Rate (%)", "Cost", "SLO Breach %"]
     rows = []
     for _, r in summary_df.iterrows():
-        rows.append([
-            r["label"],
-            int(r["n_trials"]),
-            f"{r['p95_ms_mean']:.1f} [{r['p95_ms_ci_lo']:.1f}, {r['p95_ms_ci_hi']:.1f}]",
-            f"{r['error_rate_mean'] * 100:.2f} [{r['error_rate_ci_lo'] * 100:.2f}, {r['error_rate_ci_hi'] * 100:.2f}]",
-            f"{r['cost_mean']:.3f} [{r['cost_ci_lo']:.3f}, {r['cost_ci_hi']:.3f}]",
-            f"{r['slo_breach_pct']:.0f}%",
-        ])
+        rows.append(
+            [
+                r["label"],
+                int(r["n_trials"]),
+                f"{r['p95_ms_mean']:.1f} [{r['p95_ms_ci_lo']:.1f}, {r['p95_ms_ci_hi']:.1f}]",
+                f"{r['error_rate_mean'] * 100:.2f} [{r['error_rate_ci_lo'] * 100:.2f}, {r['error_rate_ci_hi'] * 100:.2f}]",
+                f"{r['cost_mean']:.3f} [{r['cost_ci_lo']:.3f}, {r['cost_ci_hi']:.3f}]",
+                f"{r['slo_breach_pct']:.0f}%",
+            ]
+        )
 
     table = ax.table(cellText=rows, colLabels=headers, loc="center", cellLoc="center")
     table.auto_set_font_size(False)
@@ -614,7 +727,10 @@ def _generate_summary_table(summary_df: pd.DataFrame, output_path: Path):
 # Markdown report
 # ---------------------------------------------------------------------------
 
-def generate_markdown_report(df: pd.DataFrame, summary_df: pd.DataFrame, pairwise_path: Path, output_dir: Path):
+
+def generate_markdown_report(
+    df: pd.DataFrame, summary_df: pd.DataFrame, pairwise_path: Path, output_dir: Path
+):
     """Generate a Markdown report with key findings."""
     with open(pairwise_path) as f:
         pairwise = json.load(f)
@@ -674,12 +790,16 @@ def generate_markdown_report(df: pd.DataFrame, summary_df: pd.DataFrame, pairwis
 
     lines.append(f"1. **Best performer**: {best['label']} (cost = {best['cost_mean']:.3f})")
     lines.append(f"2. **Worst performer**: {worst['label']} (cost = {worst['cost_mean']:.3f})")
-    lines.append(f"3. **Lowest error rate**: {best_error['label']} (error rate = {best_error['error_rate_mean'] * 100:.2f}%)")
+    lines.append(
+        f"3. **Lowest error rate**: {best_error['label']} (error rate = {best_error['error_rate_mean'] * 100:.2f}%)"
+    )
 
     if not rl_row.empty:
         rl = rl_row.iloc[0]
         rank = list(summary_df.sort_values("cost_mean")["mode"]).index("rl") + 1
-        lines.append(f"4. **RL/adaptive rank**: #{rank} of {len(summary_df)} modes (cost = {rl['cost_mean']:.3f}, SLO breach = {rl['slo_breach_pct']:.0f}%)")
+        lines.append(
+            f"4. **RL/adaptive rank**: #{rank} of {len(summary_df)} modes (cost = {rl['cost_mean']:.3f}, SLO breach = {rl['slo_breach_pct']:.0f}%)"
+        )
 
     lines += ["", "## Pairwise Statistical Tests (Mann-Whitney U)", ""]
     lines.append("| Comparison | Metric | Mean A | Mean B | p-value | Sig | Effect (r) |")
@@ -692,9 +812,16 @@ def generate_markdown_report(df: pd.DataFrame, summary_df: pd.DataFrame, pairwis
             )
 
     lines += ["", "## Plots", ""]
-    for plot_name in ["cost_comparison", "p95_latency_comparison", "error_rate_comparison",
-                      "slo_breach_rate", "p95_boxplot", "cost_per_combo", "slo_breach_heatmap",
-                      "summary_table"]:
+    for plot_name in [
+        "cost_comparison",
+        "p95_latency_comparison",
+        "error_rate_comparison",
+        "slo_breach_rate",
+        "p95_boxplot",
+        "cost_per_combo",
+        "slo_breach_heatmap",
+        "summary_table",
+    ]:
         lines.append(f"![{plot_name}](plots/{plot_name}.png)")
         lines.append("")
 
@@ -706,6 +833,7 @@ def generate_markdown_report(df: pd.DataFrame, summary_df: pd.DataFrame, pairwis
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
 
 def main():
     if len(sys.argv) < 2:

@@ -64,7 +64,9 @@ class Materialiser:
             default_delay_seconds=cfg.default_delay_seconds,
         )
 
-    def _resolve_container_spec(self, namespace: str, target_name: str, new_image: str, release_tag: str) -> dict:
+    def _resolve_container_spec(
+        self, namespace: str, target_name: str, new_image: str, release_tag: str
+    ) -> dict:
         """
         Build the container spec for the Argo Rollout pods.
 
@@ -95,19 +97,21 @@ class Materialiser:
                 if c is not None:
                     if c.resources:
                         container["resources"] = {
-                            "requests": {
-                                k: v for k, v in (c.resources.requests or {}).items()
-                            },
-                            "limits": {
-                                k: v for k, v in (c.resources.limits or {}).items()
-                            },
+                            "requests": {k: v for k, v in (c.resources.requests or {}).items()},
+                            "limits": {k: v for k, v in (c.resources.limits or {}).items()},
                         }
                     if c.liveness_probe:
-                        container["livenessProbe"] = api_client.sanitize_for_serialization(c.liveness_probe)
+                        container["livenessProbe"] = api_client.sanitize_for_serialization(
+                            c.liveness_probe
+                        )
                     if c.readiness_probe:
-                        container["readinessProbe"] = api_client.sanitize_for_serialization(c.readiness_probe)
+                        container["readinessProbe"] = api_client.sanitize_for_serialization(
+                            c.readiness_probe
+                        )
                     if c.security_context:
-                        container["securityContext"] = api_client.sanitize_for_serialization(c.security_context)
+                        container["securityContext"] = api_client.sanitize_for_serialization(
+                            c.security_context
+                        )
                     if c.env:
                         env = api_client.sanitize_for_serialization(c.env)
                         for env_var in env:
@@ -119,7 +123,9 @@ class Materialiser:
                     if c.command:
                         container["command"] = list(c.command)
                     if c.volume_mounts:
-                        container["volumeMounts"] = api_client.sanitize_for_serialization(c.volume_mounts)
+                        container["volumeMounts"] = api_client.sanitize_for_serialization(
+                            c.volume_mounts
+                        )
                     # Copy args, overriding --version with the release tag
                     if c.args:
                         new_args = []
@@ -132,7 +138,9 @@ class Materialiser:
         except Exception as exc:
             logger.warning(
                 "Could not fetch container spec from Deployment %s/%s; using minimal spec: %s",
-                namespace, target_name, exc,
+                namespace,
+                target_name,
+                exc,
             )
 
         return container
@@ -150,7 +158,11 @@ class Materialiser:
                 name=target_name,
                 namespace=namespace,
             )
-            match_labels = (deployment.spec.selector.match_labels or {}) if deployment.spec and deployment.spec.selector else {}
+            match_labels = (
+                (deployment.spec.selector.match_labels or {})
+                if deployment.spec and deployment.spec.selector
+                else {}
+            )
             if isinstance(match_labels, dict) and match_labels:
                 return dict(match_labels)
         except Exception as exc:
@@ -214,7 +226,9 @@ class Materialiser:
                 # Argo Rollouts forbids changing spec.selector after creation.
                 # If an older Rollout exists with a different selector, patching will
                 # fail with 422. In that case, delete and recreate the Rollout.
-                if exc.status == 422 and (exc.body and "spec.selector" in exc.body and "immutable" in exc.body):
+                if exc.status == 422 and (
+                    exc.body and "spec.selector" in exc.body and "immutable" in exc.body
+                ):
                     logger.warning(
                         "Rollout %s/%s selector is immutable; deleting and recreating",
                         namespace,

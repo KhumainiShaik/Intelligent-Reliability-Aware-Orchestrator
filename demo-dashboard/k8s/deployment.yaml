@@ -59,14 +59,14 @@ spec:
       containers:
         - name: dashboard
           image: europe-west2-docker.pkg.dev/level-slate-494713-u5/oroll/rollout-demo-dashboard:latest
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           ports:
             - containerPort: 8080
           env:
             - name: DEMO_NAMESPACES
               value: workload-go,workload-cpu,workload-io,workload-mobilenet,workload-squeezenet,workload-tabular
             - name: PROMETHEUS_URL
-              value: http://prometheus-server.monitoring.svc.cluster.local
+              value: http://prometheus.monitoring.svc.cluster.local:9090
 ---
 apiVersion: v1
 kind: Service

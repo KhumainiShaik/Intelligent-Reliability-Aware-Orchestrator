@@ -206,7 +206,9 @@ def _derive_outcome_from_k6(
     avg_replicas = max(baseline_replicas, chosen_replicas)
 
     replica_seconds = avg_replicas * duration_seconds
-    resource_overhead_ratio = max(avg_replicas - baseline_replicas, 0.0) / max(baseline_replicas, 1.0)
+    resource_overhead_ratio = max(avg_replicas - baseline_replicas, 0.0) / max(
+        baseline_replicas, 1.0
+    )
 
     latency_norm = np.clip((p95 / slo_p95_latency_ms - 1.0), 0, 10) / 10.0
     resource_norm = np.clip(resource_overhead_ratio, 0, 5) / 5.0
