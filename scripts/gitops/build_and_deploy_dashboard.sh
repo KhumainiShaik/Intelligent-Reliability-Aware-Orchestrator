@@ -6,8 +6,8 @@ set -euo pipefail
 # This script:
 #   1. Builds the dashboard Docker image using buildx
 #   2. Pushes to Artifact Registry
-#   3. Patches the Kubernetes deployment with the new image
-#   4. Waits for rollout to complete
+#   3. Renders the deployment manifest with that image
+#   4. Applies the rendered manifest and waits for rollout to complete
 #
 # Environment variables (required):
 #   DASHBOARD_IMAGE           # Full image URI (e.g., europe-west2-docker.pkg.dev/...)
@@ -30,9 +30,26 @@ echo ""
 echo "Creating namespace if needed..."
 kubectl create namespace "${DASHBOARD_NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f -
 
-# Apply deployment manifest
-echo "Applying deployment manifest..."
-kubectl apply -f demo-dashboard/k8s/deployment.yaml
+rendered_dir="$(mktemp -d)"
+trap 'rm -rf "${rendered_dir}"' EXIT
+image_name="${DASHBOARD_IMAGE%:*}"
+image_tag="${DASHBOARD_IMAGE##*:}"
+
+# Apply a rendered Kustomize overlay with the requested image. The source
+# Deployment keeps a logical image name; image selection belongs to Kustomize.
+echo "Rendering and applying deployment manifest..."
+cp demo-dashboard/k8s/deployment.yaml "${rendered_dir}/deployment.yaml"
+cat > "${rendered_dir}/kustomization.yaml" <<EOF
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - deployment.yaml
+images:
+  - name: rollout-demo-dashboard
+    newName: ${image_name}
+    newTag: ${image_tag}
+EOF
+kubectl apply -k "${rendered_dir}"
 
 # Wait for deployment to exist
 echo "Waiting for deployment to exist..."
@@ -44,14 +61,6 @@ for i in {1..30}; do
   echo "  [$i/30] Waiting for deployment..."
   sleep 2
 done
-
-# Set new image
-echo ""
-echo "Setting new image in deployment..."
-kubectl -n "${DASHBOARD_NAMESPACE}" set image \
-  deployment/"${DASHBOARD_DEPLOYMENT}" \
-  dashboard="${DASHBOARD_IMAGE}" \
-  --record
 
 # Wait for rollout
 echo ""

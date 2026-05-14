@@ -12,6 +12,8 @@ they need — no module-level mutable global singletons.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -66,6 +68,12 @@ FIXED_BASELINE_ACTIONS = {
     ACTION_CANARY,
     ACTION_ROLLING,
 }
+
+
+def _spec_fingerprint(spec: dict) -> str:
+    """Stable fingerprint used to detect a new desired-state release."""
+    canonical = json.dumps(spec, sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:16]
 
 
 # Dependency registry (initialised once at startup)
@@ -485,17 +493,26 @@ def reconcile(
     stress_calc = Calculator.from_config(reg.cfg)
 
     current_phase = status.get("phase", "")
+    spec_hash = _spec_fingerprint(spec)
+    observed_spec_hash = status.get("observedSpecHash")
 
     # 1. Skip terminal phases
-    if current_phase in TERMINAL_PHASES:
+    if current_phase in TERMINAL_PHASES and observed_spec_hash == spec_hash:
         logger.info(
             "[%s/%s] Skipping — already in terminal phase %s", namespace, name, current_phase
         )
-        return {"phase": current_phase}
+        return {"phase": current_phase, "observedSpecHash": spec_hash}
+    if current_phase in TERMINAL_PHASES:
+        logger.info(
+            "[%s/%s] Desired state changed after terminal phase %s; reconciling new spec",
+            namespace,
+            name,
+            current_phase,
+        )
 
     # 2. Transition to ChoosingStrategy
-    if current_phase in ("", PHASE_PENDING):
-        _patch_status(namespace, name, {"phase": PHASE_CHOOSING})
+    if current_phase in ("", PHASE_PENDING) or current_phase in TERMINAL_PHASES:
+        _patch_status(namespace, name, {"phase": PHASE_CHOOSING, "observedSpecHash": spec_hash})
         logger.info("[%s/%s] Phase → %s", namespace, name, PHASE_CHOOSING)
 
     # 3. Collect Decision Snapshot
@@ -736,6 +753,7 @@ def reconcile(
         "chosenStrategy": final_action,
         "policyVersion": policy_version,
         "stressScore": round(stress_score, 4),
+        "observedSpecHash": spec_hash,
         "decisionTimestamp": now_iso,
         "startTimestamp": now_iso,
         "message": status_message,
@@ -800,6 +818,7 @@ def reconcile(
         "phase": PHASE_EXECUTING,
         "chosenStrategy": final_action,
         "stressScore": round(stress_score, 4),
+        "observedSpecHash": spec_hash,
     }
 
 

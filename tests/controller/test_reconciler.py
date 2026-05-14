@@ -19,6 +19,7 @@ from controller.reconciler import (
     _is_fixed_baseline_action_set,
     _is_rule_based_action_set,
     _rule_based_decision,
+    _spec_fingerprint,
     _v12_contextual_decision,
     reconcile,
 )
@@ -529,3 +530,90 @@ class TestTrainedContextualReconcile:
         executing_status = patch_status.call_args_list[1].args[2]
         assert executing_status["chosenStrategy"] == ACTION_ROLLING
         assert executing_status["policyVersion"] == "trained-v11"
+
+
+class TestTerminalSpecChanges:
+    """Tests for repeated GitOps updates to an existing OrchestratedRollout."""
+
+    def test_terminal_rollout_reconciles_when_spec_hash_changes(
+        self,
+        monkeypatch,
+        default_config,
+    ) -> None:
+        guardrails = MagicMock()
+        guardrails.apply.return_value = (ACTION_ROLLING, False, "")
+        registry = SimpleNamespace(
+            cfg=default_config,
+            snap_collector=MagicMock(
+                collect=MagicMock(return_value=DecisionSnapshot(error_rate=0.0))
+            ),
+            guardrails=guardrails,
+            materialiser=MagicMock(),
+            episode_logger=MagicMock(),
+            custom_api=MagicMock(),
+            policy_engine=None,
+        )
+        patch_status = MagicMock()
+        monkeypatch.setattr(reconciler, "_registry", registry)
+        monkeypatch.setattr(reconciler, "_patch_status", patch_status)
+
+        old_spec = {
+            "targetRef": {"name": "workload"},
+            "release": {"image": "repo", "tag": "v2"},
+            "actionSet": [ACTION_RL],
+            "rolloutHints": {"policyVariant": "v12-contextual"},
+        }
+        spec = {
+            "targetRef": {"name": "workload"},
+            "release": {"image": "repo", "tag": "v3"},
+            "actionSet": [ACTION_RL],
+            "rolloutHints": {"policyVariant": "v12-contextual"},
+        }
+        body = {"metadata": {"name": "oroll", "namespace": "ns", "uid": "uid"}, "spec": spec}
+        status = {
+            "phase": reconciler.PHASE_COMPLETED,
+            "observedSpecHash": _spec_fingerprint(old_spec),
+        }
+
+        result = reconcile(spec, status, body["metadata"], "ns", "oroll", "uid", body)
+
+        assert result["chosenStrategy"] == ACTION_ROLLING
+        registry.materialiser.apply.assert_called_once()
+        executing_status = patch_status.call_args_list[1].args[2]
+        assert executing_status["observedSpecHash"] == _spec_fingerprint(spec)
+
+    def test_terminal_rollout_skips_when_spec_hash_matches(
+        self,
+        monkeypatch,
+        default_config,
+    ) -> None:
+        registry = SimpleNamespace(
+            cfg=default_config,
+            snap_collector=MagicMock(),
+            guardrails=MagicMock(),
+            materialiser=MagicMock(),
+            episode_logger=MagicMock(),
+            custom_api=MagicMock(),
+            policy_engine=None,
+        )
+        monkeypatch.setattr(reconciler, "_registry", registry)
+        monkeypatch.setattr(reconciler, "_patch_status", MagicMock())
+
+        spec = {
+            "targetRef": {"name": "workload"},
+            "release": {"image": "repo", "tag": "v3"},
+            "actionSet": [ACTION_RL],
+        }
+        body = {"metadata": {"name": "oroll", "namespace": "ns", "uid": "uid"}, "spec": spec}
+        status = {
+            "phase": reconciler.PHASE_COMPLETED,
+            "observedSpecHash": _spec_fingerprint(spec),
+        }
+
+        result = reconcile(spec, status, body["metadata"], "ns", "oroll", "uid", body)
+
+        assert result == {
+            "phase": reconciler.PHASE_COMPLETED,
+            "observedSpecHash": _spec_fingerprint(spec),
+        }
+        registry.materialiser.apply.assert_not_called()

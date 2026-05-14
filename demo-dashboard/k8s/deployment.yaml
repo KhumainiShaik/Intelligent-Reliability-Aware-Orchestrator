@@ -58,7 +58,7 @@ spec:
       serviceAccountName: rollout-demo-dashboard
       containers:
         - name: dashboard
-          image: europe-west2-docker.pkg.dev/level-slate-494713-u5/oroll/rollout-demo-dashboard:latest
+          image: rollout-demo-dashboard
           imagePullPolicy: Always
           ports:
             - containerPort: 8080
