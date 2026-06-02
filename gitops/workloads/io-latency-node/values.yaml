@@ -40,11 +40,11 @@ modelProfile:
 serviceMonitor:
   enabled: false
 orchestratedRollout:
-  enabled: false
+  enabled: true
   actionSet:
     - rl
-    - pre-scale
+    #- pre-scale
   trafficProfile: ramp
   objective: reliability
   policyVariant: v12-contextual
-  faultContext: none
+  faultContext: network-latency
