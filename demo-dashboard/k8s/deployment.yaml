@@ -64,7 +64,7 @@ spec:
             - containerPort: 8080
           env:
             - name: DEMO_NAMESPACES
-              value: workload-cpu
+              value: workload-go,workload-cpu,workload-io,workload-mobilenet,workload-squeezenet,workload-tabular
             - name: PROMETHEUS_URL
               value: http://prometheus.monitoring.svc.cluster.local:9090
 ---
