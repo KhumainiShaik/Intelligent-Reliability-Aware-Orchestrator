@@ -32,6 +32,16 @@ app = FastAPI(title=APP_TITLE)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
+
+APP_NAME_MAP: Dict[str, str] = {
+    "go-service": "workload-go-service",
+    "cpu-bound-fastapi": "workload-cpu-bound-fastapi",
+    "io-latency-node": "workload-io-latency-node",
+    "mobilenetv2-onnx": "workload-mobilenetv2-onnx",
+    "squeezenet-onnx": "workload-squeezenet-onnx",
+    "tabular-sklearn": "workload-tabular-sklearn",
+}
+
 _k8s_loaded = False
 
 
@@ -74,29 +84,124 @@ def _parse_ts(value: Optional[str]) -> datetime:
         return datetime.min.replace(tzinfo=timezone.utc)
 
 
+def _latest_target_from_argocd() -> Optional[Dict[str, Any]]:
+    """Pick the workload whose Argo CD Application reconciled most recently.
+
+    This tracks GitOps edits (values changes) better than relying on
+    OrchestratedRollout decision timestamps, which may not update on every
+    change.
+    """
+
+    if not _load_k8s():
+        return None
+
+    api = client.CustomObjectsApi()
+    best: Optional[Dict[str, Any]] = None
+    for target_name, app_name in APP_NAME_MAP.items():
+        try:
+            obj = api.get_namespaced_custom_object(
+                "argoproj.io",
+                "v1alpha1",
+                ARGO_NAMESPACE,
+                "applications",
+                app_name,
+            )
+        except Exception:
+            continue
+
+        reconciled_at = _parse_ts(_safe_get(obj, ["status", "reconciledAt"]))
+        finished_at = _parse_ts(_safe_get(obj, ["status", "operationState", "finishedAt"]))
+        ts = max(reconciled_at, finished_at)
+        namespace = _safe_get(obj, ["spec", "destination", "namespace"])
+
+        candidate = {
+            "targetName": target_name,
+            "appName": app_name,
+            "namespace": namespace,
+            "timestamp": ts,
+            "app": obj,
+        }
+        if best is None or ts > best["timestamp"]:
+            best = candidate
+
+    return best
+
+
 def _latest_rollout() -> Dict[str, Any]:
     if not _load_k8s():
         return {"available": False, "message": "Kubernetes client is not configured"}
     api = client.CustomObjectsApi()
-    items: List[Dict[str, Any]] = []
-    for namespace in _namespaces():
+
+    selected = _latest_target_from_argocd()
+    if selected and selected.get("namespace") and selected.get("targetName"):
+        namespace = selected["namespace"]
+        target_name = selected["targetName"]
         try:
             resp = api.list_namespaced_custom_object(CRD_GROUP, CRD_VERSION, namespace, CRD_PLURAL)
-            for item in resp.get("items", []):
-                item["_namespace"] = namespace
-                items.append(item)
+            items = resp.get("items", [])
         except ApiException:
-            continue
-    if not items:
-        return {"available": False, "message": "No OrchestratedRollout objects found in demo namespaces"}
-    items.sort(
-        key=lambda obj: (
-            _parse_ts(_safe_get(obj, ["status", "decisionTimestamp"])),
-            _parse_ts(_safe_get(obj, ["metadata", "creationTimestamp"])),
-        ),
-        reverse=True,
-    )
-    obj = items[0]
+            items = []
+
+        items = [
+            item
+            for item in items
+            if _safe_get(item, ["spec", "targetRef", "name"]) == target_name
+        ]
+
+        if not items:
+            return {
+                "available": True,
+                "namespace": namespace,
+                "targetName": target_name,
+                "name": "-",
+                "created": None,
+                "decisionTimestamp": None,
+                "releaseImage": "unknown",
+                "releaseTag": "unknown",
+                "trafficProfile": "unknown",
+                "faultContext": "unknown",
+                "objective": "unknown",
+                "policyVariant": "unknown",
+                "phase": "N/A",
+                "strategy": "N/A",
+                "headroom": None,
+                "stressScore": None,
+                "policyVersion": "unknown",
+                "message": f"No OrchestratedRollout found for {target_name} in {namespace}",
+                "explanation": "This workload is not configured for policy decisions.",
+            }
+
+        items.sort(
+            key=lambda obj: (
+                _parse_ts(_safe_get(obj, ["status", "decisionTimestamp"])),
+                _parse_ts(_safe_get(obj, ["metadata", "creationTimestamp"])),
+            ),
+            reverse=True,
+        )
+        obj = items[0]
+        obj["_namespace"] = namespace
+    else:
+        # Fallback: show most recent OrchestratedRollout decision across demo namespaces.
+        items = []
+        for namespace in _namespaces():
+            try:
+                resp = api.list_namespaced_custom_object(CRD_GROUP, CRD_VERSION, namespace, CRD_PLURAL)
+                for item in resp.get("items", []):
+                    item["_namespace"] = namespace
+                    items.append(item)
+            except ApiException:
+                continue
+        if not items:
+            return {"available": False, "message": "No OrchestratedRollout objects found in demo namespaces"}
+        items.sort(
+            key=lambda obj: (
+                _parse_ts(_safe_get(obj, ["status", "decisionTimestamp"])),
+                _parse_ts(_safe_get(obj, ["metadata", "creationTimestamp"])),
+            ),
+            reverse=True,
+        )
+        obj = items[0]
+
     spec = obj.get("spec", {}) or {}
     status = obj.get("status", {}) or {}
     hints = spec.get("rolloutHints", {}) or {}
@@ -190,15 +295,7 @@ def _deployment_summary(namespace: Optional[str], target_name: Optional[str]) ->
 def _argo_summary(target_name: Optional[str]) -> Dict[str, Any]:
     if not target_name or not _load_k8s():
         return {"available": False}
-    app_name_map = {
-        "go-service": "workload-go-service",
-        "cpu-bound-fastapi": "workload-cpu-bound-fastapi",
-        "io-latency-node": "workload-io-latency-node",
-        "mobilenetv2-onnx": "workload-mobilenetv2-onnx",
-        "squeezenet-onnx": "workload-squeezenet-onnx",
-        "tabular-sklearn": "workload-tabular-sklearn",
-    }
-    app_name = app_name_map.get(target_name)
+    app_name = APP_NAME_MAP.get(target_name)
     if not app_name:
         return {"available": False}
     try:
