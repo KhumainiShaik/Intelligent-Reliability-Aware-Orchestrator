@@ -329,9 +329,11 @@ def _argo_summary(target_name: Optional[str]) -> Dict[str, Any]:
 def _prometheus_metrics(namespace: Optional[str], target_name: Optional[str]) -> Dict[str, Any]:
     if not namespace or not target_name:
         return {"available": False}
+    # Note: workloads export requests_total with endpoint and status labels
+    # Try to get latency from request_processing_seconds, failures from status codes
     queries = {
         "p95LatencySeconds": (
-            f'histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket'
+            f'histogram_quantile(0.95, sum(rate(request_processing_seconds_bucket'
             f'{{kubernetes_namespace="{namespace}",kubernetes_pod_name=~"{target_name}.*"}}[2m])) by (le))'
         ),
         "throughputRps": (
@@ -339,8 +341,8 @@ def _prometheus_metrics(namespace: Optional[str], target_name: Optional[str]) ->
             f'kubernetes_pod_name=~"{target_name}.*"}}[2m]))'
         ),
         "failuresRps": (
-            f'sum(rate(request_failures_total{{kubernetes_namespace="{namespace}",'
-            f'kubernetes_pod_name=~"{target_name}.*"}}[2m]))'
+            f'sum(rate(requests_total{{kubernetes_namespace="{namespace}",'
+            f'kubernetes_pod_name=~"{target_name}.*",status=~"[45].."}}[2m]))'
         ),
     }
     output: Dict[str, Any] = {"available": True}
