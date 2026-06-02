@@ -23,10 +23,10 @@ spec:
     maxP95LatencyMs: {{ .Values.slo.p95Ms }}
     maxErrorRate: 0.01
   rolloutHints:
-    trafficProfile: {{ default .Values.orchestratedRollout.trafficProfile $rolloutHints.trafficProfile | quote }}
-    objective: {{ default .Values.orchestratedRollout.objective $rolloutHints.objective | quote }}
-    policyVariant: {{ default .Values.orchestratedRollout.policyVariant $rolloutHints.policyVariant | quote }}
-    faultContext: {{ default .Values.orchestratedRollout.faultContext $rolloutHints.faultContext | quote }}
+    trafficProfile: {{ .Values.orchestratedRollout.trafficProfile | default $rolloutHints.trafficProfile | quote }}
+    objective: {{ .Values.orchestratedRollout.objective | default $rolloutHints.objective | quote }}
+    policyVariant: {{ .Values.orchestratedRollout.policyVariant | default $rolloutHints.policyVariant | quote }}
+    faultContext: {{ .Values.orchestratedRollout.faultContext | default $rolloutHints.faultContext | quote }}
     warmUpClass: {{ .Values.modelProfile.coldStartClass | quote }}
     imageSizeClass: {{ .Values.modelProfile.sizeClass | quote }}
 {{- end }}
