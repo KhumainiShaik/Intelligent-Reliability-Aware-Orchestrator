@@ -33,7 +33,7 @@ jobs:
       - name: Mypy
         run: python -m mypy --explicit-package-bases controller
 
-  # ── Python tests ─────────────────────────────────────────────
+  # Python tests
   test:
     runs-on: ubuntu-latest
     needs: lint

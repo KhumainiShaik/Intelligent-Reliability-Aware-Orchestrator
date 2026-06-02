@@ -16,6 +16,13 @@ service:
   port: 80
   targetPort: 8080
 
+ingress:
+  enabled: false
+  className: nginx
+  host: ""
+  path: /
+  annotations: {}
+
 resources:
   requests:
     cpu: 100m

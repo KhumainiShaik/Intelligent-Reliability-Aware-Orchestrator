@@ -172,10 +172,14 @@ jobs:
             DEPLOY_IMAGE=$(k -n "${WORKLOAD_NAMESPACE}" get deployment cpu-bound-fastapi -o jsonpath='{.spec.template.spec.containers[?(@.name=="workload")].image}' 2>/dev/null || true)
             OROLL_PHASE=$(k -n "${WORKLOAD_NAMESPACE}" get orchestratedrollout "${ORCHESTRATED_ROLLOUT_NAME}" -o jsonpath='{.status.phase}' 2>/dev/null || true)
             OROLL_STRATEGY=$(k -n "${WORKLOAD_NAMESPACE}" get orchestratedrollout "${ORCHESTRATED_ROLLOUT_NAME}" -o jsonpath='{.status.chosenStrategy}' 2>/dev/null || true)
+            ARGO_ROLLOUT_PHASE=$(k -n "${WORKLOAD_NAMESPACE}" get rollout cpu-bound-fastapi-rollout -o jsonpath='{.status.phase}' 2>/dev/null || true)
+            ARGO_ROLLOUT_HEALTHY=$(k -n "${WORKLOAD_NAMESPACE}" get rollout cpu-bound-fastapi-rollout -o jsonpath='{.status.healthy}' 2>/dev/null || true)
+            ARGO_ROLLOUT_MESSAGE=$(k -n "${WORKLOAD_NAMESPACE}" get rollout cpu-bound-fastapi-rollout -o jsonpath='{.status.message}' 2>/dev/null || true)
 
             echo "[$i/60] app sync=${SYNC:-unknown} health=${HEALTH:-unknown} revision=${REVISION:-unknown}"
             echo "[$i/60] deployment image=${DEPLOY_IMAGE:-unknown}"
             echo "[$i/60] orchestratedrollout phase=${OROLL_PHASE:-unknown} strategy=${OROLL_STRATEGY:-unknown}"
+            echo "[$i/60] argo rollout phase=${ARGO_ROLLOUT_PHASE:-unknown} healthy=${ARGO_ROLLOUT_HEALTHY:-unknown} message=${ARGO_ROLLOUT_MESSAGE:-unknown}"
 
             REVISION_NOTE="mismatch"
             if [ "${REVISION}" = "${EXPECTED_REVISION}" ] || \
@@ -187,7 +191,8 @@ jobs:
             if [ "${SYNC}" = "Synced" ] && [ "${HEALTH}" = "Healthy" ] && \
                [ "${DEPLOY_IMAGE}" = "${EXPECTED_IMAGE}" ] && \
                [ "${OROLL_PHASE}" = "Completed" ] && \
-               [ -n "${OROLL_STRATEGY}" ]; then
+               [ -n "${OROLL_STRATEGY}" ] && \
+               { [ "${ARGO_ROLLOUT_HEALTHY}" = "true" ] || [ "${ARGO_ROLLOUT_PHASE}" = "Healthy" ]; }; then
               APP_READY="true"
               break
             fi
@@ -221,6 +226,6 @@ jobs:
           echo "Expected workload image: ${EXPECTED_IMAGE}"
 
           if [ "${APP_READY}" != "true" ]; then
-            echo "Argo CD did not reach Synced/Healthy with the declared image and completed OrchestratedRollout within 10 minutes."
+            echo "Argo CD did not reach Synced/Healthy with the declared image, completed OrchestratedRollout, and healthy Argo Rollout within 10 minutes."
             exit 1
           fi

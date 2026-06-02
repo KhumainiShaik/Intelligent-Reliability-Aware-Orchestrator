@@ -12,6 +12,10 @@ service:
   type: ClusterIP
   port: 80
   targetPort: 8080
+
+ingress:
+  enabled: true
+  className: nginx
 resources:
   requests:
     cpu: 150m
