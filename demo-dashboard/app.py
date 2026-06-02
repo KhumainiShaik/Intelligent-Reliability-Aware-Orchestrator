@@ -32,16 +32,6 @@ app = FastAPI(title=APP_TITLE)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
-
-APP_NAME_MAP: Dict[str, str] = {
-    "go-service": "workload-go-service",
-    "cpu-bound-fastapi": "workload-cpu-bound-fastapi",
-    "io-latency-node": "workload-io-latency-node",
-    "mobilenetv2-onnx": "workload-mobilenetv2-onnx",
-    "squeezenet-onnx": "workload-squeezenet-onnx",
-    "tabular-sklearn": "workload-tabular-sklearn",
-}
-
 _k8s_loaded = False
 
 
@@ -96,27 +86,31 @@ def _latest_target_from_argocd() -> Optional[Dict[str, Any]]:
         return None
 
     api = client.CustomObjectsApi()
+    try:
+        resp = api.list_namespaced_custom_object("argoproj.io", "v1alpha1", ARGO_NAMESPACE, "applications")
+        apps = resp.get("items", [])
+    except Exception:
+        apps = []
+
+    namespaces = set(_namespaces())
     best: Optional[Dict[str, Any]] = None
-    for target_name, app_name in APP_NAME_MAP.items():
-        try:
-            obj = api.get_namespaced_custom_object(
-                "argoproj.io",
-                "v1alpha1",
-                ARGO_NAMESPACE,
-                "applications",
-                app_name,
-            )
-        except Exception:
+    for obj in apps:
+        namespace = _safe_get(obj, ["spec", "destination", "namespace"])
+        if not namespace or namespace not in namespaces:
+            continue
+
+        # Portable workload apps use Helm releaseName as the workload name.
+        target_name = _safe_get(obj, ["spec", "source", "helm", "releaseName"])
+        if not target_name:
             continue
 
         reconciled_at = _parse_ts(_safe_get(obj, ["status", "reconciledAt"]))
         finished_at = _parse_ts(_safe_get(obj, ["status", "operationState", "finishedAt"]))
         ts = max(reconciled_at, finished_at)
-        namespace = _safe_get(obj, ["spec", "destination", "namespace"])
 
         candidate = {
             "targetName": target_name,
-            "appName": app_name,
+            "appName": _safe_get(obj, ["metadata", "name"], "unknown"),
             "namespace": namespace,
             "timestamp": ts,
             "app": obj,
@@ -295,15 +289,35 @@ def _deployment_summary(namespace: Optional[str], target_name: Optional[str]) ->
 def _argo_summary(target_name: Optional[str]) -> Dict[str, Any]:
     if not target_name or not _load_k8s():
         return {"available": False}
-    app_name = APP_NAME_MAP.get(target_name)
-    if not app_name:
-        return {"available": False}
     try:
         api = client.CustomObjectsApi()
-        obj = api.get_namespaced_custom_object("argoproj.io", "v1alpha1", ARGO_NAMESPACE, "applications", app_name)
+        resp = api.list_namespaced_custom_object("argoproj.io", "v1alpha1", ARGO_NAMESPACE, "applications")
+        apps = resp.get("items", [])
+        namespaces = set(_namespaces())
+        candidates = []
+        for obj in apps:
+            ns = _safe_get(obj, ["spec", "destination", "namespace"])
+            if not ns or ns not in namespaces:
+                continue
+            release = _safe_get(obj, ["spec", "source", "helm", "releaseName"])
+            if release != target_name:
+                continue
+            candidates.append(obj)
+
+        if not candidates:
+            return {"available": False}
+
+        candidates.sort(
+            key=lambda o: max(
+                _parse_ts(_safe_get(o, ["status", "reconciledAt"])),
+                _parse_ts(_safe_get(o, ["status", "operationState", "finishedAt"])),
+            ),
+            reverse=True,
+        )
+        obj = candidates[0]
         return {
             "available": True,
-            "name": app_name,
+            "name": _safe_get(obj, ["metadata", "name"], "unknown"),
             "sync": _safe_get(obj, ["status", "sync", "status"], "unknown"),
             "health": _safe_get(obj, ["status", "health", "status"], "unknown"),
             "revision": _safe_get(obj, ["status", "sync", "revision"], "unknown"),
