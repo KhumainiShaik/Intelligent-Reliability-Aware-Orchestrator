@@ -106,7 +106,7 @@ def _latest_target_from_argocd() -> Optional[Dict[str, Any]]:
 
         reconciled_at = _parse_ts(_safe_get(obj, ["status", "reconciledAt"]))
         finished_at = _parse_ts(_safe_get(obj, ["status", "operationState", "finishedAt"]))
-        ts = max(reconciled_at, finished_at)
+        ts = finished_at if finished_at > datetime.min.replace(tzinfo=timezone.utc) else reconciled_at
 
         candidate = {
             "targetName": target_name,
@@ -308,9 +308,9 @@ def _argo_summary(target_name: Optional[str]) -> Dict[str, Any]:
             return {"available": False}
 
         candidates.sort(
-            key=lambda o: max(
-                _parse_ts(_safe_get(o, ["status", "reconciledAt"])),
+            key=lambda o: (
                 _parse_ts(_safe_get(o, ["status", "operationState", "finishedAt"])),
+                _parse_ts(_safe_get(o, ["status", "reconciledAt"])),
             ),
             reverse=True,
         )
